@@ -260,9 +260,11 @@ app.post('/buscar', auth, async (req, res) => {
     if (!paciente) return res.status(400).json({ error: 'paciente_nombre es requerido' });
     
     const result = await pool.query(
-      `SELECT * FROM citas WHERE paciente_nombre ILIKE $1 AND estado != 'cancelada' ORDER BY fecha ASC`,
-      [`%${paciente}%`]
-    );
+  `SELECT * FROM citas 
+   WHERE unaccent(lower(paciente_nombre)) ILIKE unaccent(lower($1)) 
+   AND estado != 'cancelada' ORDER BY fecha ASC`,
+  [`%${paciente}%`]
+);
     res.json({ citas: result.rows, total: result.rowCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
