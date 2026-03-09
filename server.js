@@ -251,7 +251,23 @@ app.get('/doctores', auth, async (req, res) => {
   }
 });
 
-
+/**
+ * POST /buscar — Buscar citas por nombre de paciente
+ */
+app.post('/buscar', auth, async (req, res) => {
+  try {
+    const paciente = req.body.paciente_nombre || req.body.paciente;
+    if (!paciente) return res.status(400).json({ error: 'paciente_nombre es requerido' });
+    
+    const result = await pool.query(
+      `SELECT * FROM citas WHERE paciente_nombre ILIKE $1 AND estado != 'cancelada' ORDER BY fecha ASC`,
+      [`%${paciente}%`]
+    );
+    res.json({ citas: result.rows, total: result.rowCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // ─── START SERVER ───────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
