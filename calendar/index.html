@@ -421,8 +421,8 @@ function loadDemo() {
 // ── UTILS ───────────────────────────────────────────────────────────────────
 function todayStr() { return new Date().toISOString().split('T')[0]; }
 function addDays(s, n) { const d = new Date(s); d.setDate(d.getDate()+n); return d.toISOString().split('T')[0]; }
-function fmtDate(s) { const [y,m,d]=s.split('-'); return `${d} de ${MESES[parseInt(m)-1]} ${y}`; }
-function evForDate(d) { return eventos.filter(e => e.fecha === d).sort((a,b)=>a.hora.localeCompare(b.hora)); }
+function fmtDate(s) { const fecha=s.toString().split('T')[0]; const [y,m,d]=fecha.split('-'); return `${d} de ${MESES[parseInt(m)-1]} ${y}`; }
+function evForDate(d) { return eventos.filter(e => e.fecha.toString().split('T')[0] === d).sort((a,b)=>a.hora.localeCompare(b.hora)); }
 function weekStart(d) { const s=new Date(d); s.setDate(s.getDate()-s.getDay()); return s; }
 
 // ── RENDER ──────────────────────────────────────────────────────────────────
@@ -510,7 +510,7 @@ function renderMini() {
   while(cells.length%7!==0) cells.push({d:cells.length-dim-first+2,other:true,mo:m+1,yr:y});
   cells.forEach(c=>{
     const ds=`${c.yr}-${String(c.mo+1).padStart(2,'0')}-${String(c.d).padStart(2,'0')}`;
-    const hasEv=!c.other&&eventos.some(e=>e.fecha===ds&&e.estado!=='cancelada');
+    const hasEv=!c.other&&eventos.some(e=>e.fecha.toString().split('T')[0]===ds&&e.estado!=='cancelada');
     const isToday=ds===hoy;
     h+=`<div class="mini-day${c.other?' other':''}${isToday?' today':''} ${hasEv?'has-ev':''}" onclick="${c.other?'':`jumpTo('${ds}')`}">${c.d}${hasEv?'<span class="dot-ev"></span>':''}</div>`;
   });
@@ -537,10 +537,7 @@ function showDayEvents(ds){
   const evDia=eventos.filter(e=>e.fecha.toString().split('T')[0]===ds && e.estado!=='cancelada');
   if(evDia.length===0){ openNew(ds); return; }
   if(evDia.length===1){ showDetail(evDia[0].id); return; }
-  // Mostrar lista del día en la agenda lateral
   jumpTo(ds);
-  const agenda=document.getElementById('agendaList');
-  if(agenda) agenda.scrollIntoView({behavior:'smooth'});
 }
 function onCellClick(ds,hora=null){ showDayEvents(ds); }
 
