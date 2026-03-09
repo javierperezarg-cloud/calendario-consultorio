@@ -533,7 +533,16 @@ function nav(d){ view==='month'?curDate.setMonth(curDate.getMonth()+d):curDate.s
 function miniNav(d){ miniDate.setMonth(miniDate.getMonth()+d); renderMini(); }
 function setView(v,btn){ view=v; document.querySelectorAll('.vt').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); render(); }
 function jumpTo(ds){ curDate=new Date(ds); miniDate=new Date(ds); render(); }
-function onCellClick(ds,hora=null){ openNew(ds,hora); }
+function showDayEvents(ds){
+  const evDia=eventos.filter(e=>e.fecha.toString().split('T')[0]===ds && e.estado!=='cancelada');
+  if(evDia.length===0){ openNew(ds); return; }
+  if(evDia.length===1){ showDetail(evDia[0].id); return; }
+  // Mostrar lista del día en la agenda lateral
+  jumpTo(ds);
+  const agenda=document.getElementById('agendaList');
+  if(agenda) agenda.scrollIntoView({behavior:'smooth'});
+}
+function onCellClick(ds,hora=null){ showDayEvents(ds); }
 
 // ── FORM ────────────────────────────────────────────────────────────────────
 function openNew(fecha=null, hora=null){
@@ -559,7 +568,7 @@ function openEdit(ev){
   document.getElementById('fEmail').value=ev.paciente_email||'';
   document.getElementById('fTipo').value=ev.tipo;
   document.getElementById('fDoctor').value=ev.doctor;
-  document.getElementById('fFecha').value=ev.fecha;
+  document.getElementById('fFecha').value=ev.fecha.toString().split('T')[0];
   document.getElementById('fHora').value=ev.hora.slice(0,5);
   document.getElementById('fNotas').value=ev.notas||'';
   document.getElementById('btnDel').style.display='inline-block';
