@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DentaCal Pro</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #0f1117;
+  --surface:  #171c26;
+  --surface2: #1e2535;
+  --surface3: #252d3f;
+  --accent:   #4ecca3;
+  --accent2:  #3bb891;
+  --accent-glow: rgba(78,204,163,0.15);
+  --danger:   #ff6b6b;
+  --warn:     #ffd166;
+  --text:     #e8edf5;
+  --text2:    #8892a4;
+  --border:   #2a3347;
+  --radius:   12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* ── HEADER ── */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 28px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 50;
+  backdrop-filter: blur(10px);
+}
+.logo { font-family: 'Playfair Display', serif; font-size: 1.5rem; color: var(--accent); letter-spacing: -0.5px; }
+.logo small { font-family: 'Outfit', sans-serif; font-size: 0.72rem; font-weight: 300; color: var(--text2); display: block; letter-spacing: 0.1em; text-transform: uppercase; margin-top: -2px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.api-status { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--text2); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+.dot.online { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.btn-new {
+  background: var(--accent); color: var(--bg);
+  border: none; padding: 9px 20px; border-radius: 50px;
+  font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.85rem;
+  cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+}
+.btn-new:hover { background: var(--accent2); transform: scale(1.04); }
+.btn-config {
+  background: var(--surface2); color: var(--text2);
+  border: 1px solid var(--border); padding: 9px 16px; border-radius: 50px;
+  font-family: 'Outfit', sans-serif; font-size: 0.82rem;
+  cursor: pointer; transition: all 0.15s;
+}
+.btn-config:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── LAYOUT ── */
+.app { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 57px); }
+
+/* ── SIDEBAR ── */
+.sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 20px 16px; display: flex; flex-direction: column; gap: 24px; overflow-y: auto; }
+
+.mini-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.mini-header h3 { font-family: 'Playfair Display', serif; font-size: 1rem; color: var(--accent); }
+.mini-nav { background: none; border: none; cursor: pointer; color: var(--text2); font-size: 1rem; padding: 4px 8px; border-radius: 6px; transition: all 0.15s; }
+.mini-nav:hover { background: var(--surface3); color: var(--text); }
+
+.mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; text-align: center; }
+.mini-grid .dl { font-size: 0.62rem; font-weight: 600; color: var(--text2); padding: 4px 0; text-transform: uppercase; letter-spacing: 0.08em; }
+.mini-day { font-size: 0.78rem; padding: 5px 2px; border-radius: 50%; cursor: pointer; transition: all 0.12s; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+.mini-day:hover { background: var(--surface3); }
+.mini-day.today { background: var(--accent); color: var(--bg); font-weight: 700; }
+.mini-day.other { color: var(--border); cursor: default; }
+.mini-day.has-ev .dot-ev { width: 3px; height: 3px; background: var(--accent); border-radius: 50%; margin-top: 1px; }
+.mini-day.today .dot-ev { background: var(--bg); }
+
+.section-label { font-size: 0.65rem; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 8px; }
+
+.agenda-card { background: var(--surface2); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 10px 12px; margin-bottom: 7px; cursor: pointer; transition: all 0.15s; }
+.agenda-card:hover { border-color: var(--accent); transform: translateX(3px); }
+.agenda-card .ac-time { font-size: 0.7rem; font-weight: 600; color: var(--accent); }
+.agenda-card .ac-name { font-size: 0.85rem; font-weight: 500; margin-top: 1px; }
+.agenda-card .ac-type { font-size: 0.7rem; color: var(--text2); }
+.no-citas { text-align: center; padding: 16px; font-size: 0.8rem; color: var(--text2); background: var(--surface2); border-radius: 8px; }
+
+.leyenda { display: flex; flex-direction: column; gap: 6px; }
+.leg-item { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--text2); }
+.leg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── MAIN ── */
+.main { padding: 24px 28px; overflow-y: auto; }
+.cal-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.cal-topbar h2 { font-family: 'Playfair Display', serif; font-size: 1.8rem; color: var(--text); }
+.nav-grp { display: flex; gap: 5px; }
+.arrow { background: var(--surface2); border: 1px solid var(--border); width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1rem; color: var(--text2); display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.arrow:hover { border-color: var(--accent); color: var(--accent); }
+.view-toggle { display: flex; background: var(--surface2); border-radius: 8px; padding: 3px; gap: 3px; border: 1px solid var(--border); }
+.vt { background: none; border: none; padding: 5px 16px; border-radius: 6px; font-family: 'Outfit', sans-serif; font-size: 0.82rem; color: var(--text2); cursor: pointer; transition: all 0.15s; }
+.vt.active { background: var(--surface3); color: var(--accent); font-weight: 600; }
+
+/* ── LOADING ── */
+.loading-overlay { display: flex; align-items: center; justify-content: center; min-height: 300px; }
+.spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── MONTH GRID ── */
+.cal-grid { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+.cal-head { display: grid; grid-template-columns: repeat(7,1fr); background: var(--surface2); border-bottom: 1px solid var(--border); }
+.cal-head div { padding: 11px; text-align: center; font-size: 0.72rem; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.1em; }
+.cal-body { display: grid; grid-template-columns: repeat(7,1fr); }
+.cal-cell { min-height: 100px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 7px; cursor: pointer; transition: background 0.12s; position: relative; }
+.cal-cell:nth-child(7n) { border-right: none; }
+.cal-cell:hover { background: var(--surface2); }
+.cal-cell.other { opacity: 0.35; }
+.cal-cell.today { background: var(--accent-glow); }
+.num { font-size: 0.8rem; font-weight: 500; color: var(--text2); width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; margin-bottom: 3px; }
+.cal-cell.today .num { background: var(--accent); color: var(--bg); font-weight: 700; }
+.ev-chip { font-size: 0.68rem; padding: 3px 7px; border-radius: 4px; margin-bottom: 2px; font-weight: 500; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: filter 0.15s; border-left: 2px solid transparent; }
+.ev-chip:hover { filter: brightness(1.2); }
+.more { font-size: 0.65rem; color: var(--text2); padding: 2px 4px; }
+
+/* TIPO COLORS */
+.t-limpieza   { background: rgba(78,204,163,0.15);  color: #4ecca3; border-color: #4ecca3; }
+.t-ortodoncia { background: rgba(100,160,255,0.15); color: #64a0ff; border-color: #64a0ff; }
+.t-extraccion { background: rgba(255,107,107,0.15); color: #ff6b6b; border-color: #ff6b6b; }
+.t-consulta   { background: rgba(255,209,102,0.15); color: #ffd166; border-color: #ffd166; }
+.t-endodoncia { background: rgba(200,160,255,0.15); color: #c8a0ff; border-color: #c8a0ff; }
+.t-cancelada  { background: rgba(100,100,100,0.15); color: #666; border-color: #555; text-decoration: line-through; }
+
+/* ── WEEK GRID ── */
+.week-wrap { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+.week-head { display: grid; grid-template-columns: 52px repeat(7,1fr); background: var(--surface2); border-bottom: 1px solid var(--border); }
+.week-head div { padding: 10px 6px; text-align: center; font-size: 0.72rem; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; }
+.week-head .today-col { color: var(--accent); }
+.week-body { display: grid; grid-template-columns: 52px repeat(7,1fr); max-height: 560px; overflow-y: auto; }
+.hour-lbl { font-size: 0.65rem; color: var(--text2); padding: 4px 6px 0 0; text-align: right; border-bottom: 1px solid var(--border); min-height: 48px; }
+.wk-cell { border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); min-height: 48px; padding: 2px; cursor: pointer; transition: background 0.12s; }
+.wk-cell:hover { background: var(--surface2); }
+.wk-cell.today-col { background: var(--accent-glow); }
+.wk-ev { font-size: 0.68rem; padding: 3px 5px; border-radius: 4px; font-weight: 500; cursor: pointer; margin-bottom: 2px; border-left: 2px solid transparent; }
+
+/* ── MODAL ── */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); animation: fIn 0.2s; }
+@keyframes fIn { from{opacity:0} to{opacity:1} }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 30px; width: 480px; max-width: 95vw; box-shadow: 0 32px 80px rgba(0,0,0,0.5); animation: sUp 0.25s cubic-bezier(0.34,1.56,0.64,1); }
+@keyframes sUp { from{transform:translateY(24px);opacity:0} to{transform:translateY(0);opacity:1} }
+.modal h3 { font-family: 'Playfair Display', serif; font-size: 1.4rem; color: var(--accent); margin-bottom: 22px; }
+.fg { margin-bottom: 15px; }
+.fg label { display: block; font-size: 0.72rem; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 5px; }
+.fg input, .fg select, .fg textarea {
+  width: 100%; padding: 10px 13px; border: 1.5px solid var(--border);
+  border-radius: 9px; background: var(--surface2); color: var(--text);
+  font-family: 'Outfit', sans-serif; font-size: 0.88rem; outline: none; transition: border-color 0.15s;
+}
+.fg input:focus, .fg select:focus, .fg textarea:focus { border-color: var(--accent); }
+.fg select option { background: var(--surface2); }
+.fg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.modal-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+.btn-save { background: var(--accent); color: var(--bg); border: none; padding: 11px 26px; border-radius: 50px; font-family: 'Outfit', sans-serif; font-weight: 600; font-size: 0.88rem; cursor: pointer; transition: all 0.2s; }
+.btn-save:hover { background: var(--accent2); transform: scale(1.03); }
+.btn-save:disabled { opacity: 0.5; cursor: wait; }
+.btn-cancel-m { background: none; border: 1px solid var(--border); color: var(--text2); padding: 11px 20px; border-radius: 50px; font-family: 'Outfit', sans-serif; font-size: 0.85rem; cursor: pointer; transition: all 0.15s; }
+.btn-cancel-m:hover { border-color: var(--text2); color: var(--text); }
+.btn-del { background: none; border: 1px solid rgba(255,107,107,0.4); color: var(--danger); padding: 11px 16px; border-radius: 50px; font-family: 'Outfit', sans-serif; font-size: 0.82rem; cursor: pointer; transition: all 0.15s; }
+.btn-del:hover { background: rgba(255,107,107,0.1); }
+
+/* ── DETAIL MODAL ── */
+.drow { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.drow:last-child { border-bottom: none; }
+.dic { font-size: 1rem; width: 22px; text-align: center; }
+.dlb { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text2); font-weight: 600; }
+.dvl { font-size: 0.9rem; font-weight: 500; margin-top: 1px; }
+.badge { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 50px; font-size: 0.78rem; font-weight: 600; margin-bottom: 16px; }
+
+/* ── CONFIG MODAL ── */
+.cfg-input { width: 100%; padding: 10px 13px; border: 1.5px solid var(--border); border-radius: 9px; background: var(--surface2); color: var(--text); font-family: 'Outfit', sans-serif; font-size: 0.88rem; outline: none; }
+.cfg-input:focus { border-color: var(--accent); }
+.cfg-hint { font-size: 0.72rem; color: var(--text2); margin-top: 5px; }
+
+/* ── TOAST ── */
+.toast { position: fixed; bottom: 22px; right: 24px; background: var(--surface); border: 1px solid var(--accent); color: var(--text); padding: 12px 20px; border-radius: 50px; font-size: 0.82rem; font-weight: 500; box-shadow: 0 8px 32px rgba(0,0,0,0.4); transform: translateY(80px); transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1); z-index: 999; }
+.toast.show { transform: translateY(0); }
+.toast.err { border-color: var(--danger); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">DentaCal <small>Panel Médico</small></div>
+  <div class="header-right">
+    <div class="api-status">
+      <div class="dot" id="statusDot"></div>
+      <span id="statusText">Conectando...</span>
+    </div>
+    <button class="btn-config" onclick="openConfig()">⚙ API</button>
+    <button class="btn-new" onclick="openNew()">+ Nueva Cita</button>
+  </div>
+</header>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div>
+      <div class="mini-header">
+        <h3 id="miniLbl"></h3>
+        <div>
+          <button class="mini-nav" onclick="miniNav(-1)">‹</button>
+          <button class="mini-nav" onclick="miniNav(1)">›</button>
+        </div>
+      </div>
+      <div class="mini-grid" id="miniGrid"></div>
+    </div>
+    <div>
+      <p class="section-label">Citas de hoy</p>
+      <div id="todayList"></div>
+    </div>
+    <div>
+      <p class="section-label">Leyenda</p>
+      <div class="leyenda">
+        <div class="leg-item"><div class="leg-dot" style="background:#4ecca3"></div>Limpieza</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#64a0ff"></div>Ortodoncia</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#ff6b6b"></div>Extracción</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#ffd166"></div>Consulta</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#c8a0ff"></div>Endodoncia</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="cal-topbar">
+      <div class="nav-grp">
+        <button class="arrow" onclick="nav(-1)">‹</button>
+        <button class="arrow" onclick="nav(1)">›</button>
+      </div>
+      <h2 id="mainLbl"></h2>
+      <div class="view-toggle">
+        <button class="vt active" onclick="setView('month',this)">Mes</button>
+        <button class="vt" onclick="setView('week',this)">Semana</button>
+      </div>
+    </div>
+    <div id="calBody"></div>
+  </main>
+</div>
+
+<!-- CONFIG MODAL -->
+<div class="overlay" id="cfgModal" style="display:none" onclick="closeOverlay(event,'cfgModal')">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:400px">
+    <h3>Configurar API</h3>
+    <div class="fg">
+      <label>URL de tu API</label>
+      <input class="cfg-input" id="cfgUrl" placeholder="http://tu-vps.com:3000">
+      <p class="cfg-hint">Ejemplo: http://192.168.1.100:3000 o https://api.tudominio.com</p>
+    </div>
+    <div class="fg">
+      <label>API Key</label>
+      <input class="cfg-input" id="cfgKey" type="password" placeholder="dentacal-secret-...">
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel-m" onclick="closeModal('cfgModal')">Cancelar</button>
+      <button class="btn-save" onclick="saveConfig()">Guardar y Conectar</button>
+    </div>
+  </div>
+</div>
+
+<!-- FORM MODAL -->
+<div class="overlay" id="formModal" style="display:none" onclick="closeOverlay(event,'formModal')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3 id="formTitle">Nueva Cita</h3>
+    <div class="fg">
+      <label>Nombre del Paciente</label>
+      <input id="fNombre" placeholder="Nombre completo">
+    </div>
+    <div class="fg-row">
+      <div class="fg">
+        <label>Teléfono</label>
+        <input id="fTel" placeholder="+1234567890">
+      </div>
+      <div class="fg">
+        <label>Email</label>
+        <input id="fEmail" type="email" placeholder="paciente@email.com">
+      </div>
+    </div>
+    <div class="fg-row">
+      <div class="fg">
+        <label>Tipo de Cita</label>
+        <select id="fTipo">
+          <option value="limpieza">🪥 Limpieza</option>
+          <option value="ortodoncia">🦷 Ortodoncia</option>
+          <option value="extraccion">🔧 Extracción</option>
+          <option value="consulta">📋 Consulta</option>
+          <option value="endodoncia">💉 Endodoncia</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>Doctor</label>
+        <select id="fDoctor">
+          <option>Dr. García</option>
+          <option>Dra. Martínez</option>
+          <option>Dr. López</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg-row">
+      <div class="fg">
+        <label>Fecha</label>
+        <input id="fFecha" type="date">
+      </div>
+      <div class="fg">
+        <label>Hora</label>
+        <input id="fHora" type="time" value="09:00">
+      </div>
+    </div>
+    <div class="fg">
+      <label>Notas</label>
+      <textarea id="fNotas" rows="2" placeholder="Alergias, observaciones..."></textarea>
+    </div>
+    <div class="modal-foot">
+      <div style="display:flex;gap:8px">
+        <button class="btn-cancel-m" onclick="closeModal('formModal')">Cancelar</button>
+        <button class="btn-del" id="btnDel" style="display:none" onclick="deleteCita()">🗑 Eliminar</button>
+      </div>
+      <button class="btn-save" id="btnSave" onclick="saveCita()">Guardar Cita</button>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="overlay" id="detModal" style="display:none" onclick="closeOverlay(event,'detModal')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3 id="dNombre"></h3>
+    <div id="dBadge"></div>
+    <div id="dBody"></div>
+    <div class="modal-foot">
+      <button class="btn-del" onclick="deleteFromDet()">🗑 Cancelar cita</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn-cancel-m" onclick="closeModal('detModal')">Cerrar</button>
+        <button class="btn-save" onclick="editFromDet()">✏️ Editar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+let API_URL = localStorage.getItem('dc_url') || '';
+let API_KEY = localStorage.getItem('dc_key') || '';
+
+const TIPOS = {
+  limpieza:   { label:'Limpieza',   icon:'🪥', cls:'t-limpieza',   color:'#4ecca3' },
+  ortodoncia: { label:'Ortodoncia', icon:'🦷', cls:'t-ortodoncia', color:'#64a0ff' },
+  extraccion: { label:'Extracción', icon:'🔧', cls:'t-extraccion', color:'#ff6b6b' },
+  consulta:   { label:'Consulta',   icon:'📋', cls:'t-consulta',   color:'#ffd166' },
+  endodoncia: { label:'Endodoncia', icon:'💉', cls:'t-endodoncia', color:'#c8a0ff' },
+  cancelada:  { label:'Cancelada',  icon:'✖️', cls:'t-cancelada',  color:'#666'    },
+};
+
+const MESES  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const DIAS   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+
+let eventos   = [];
+let curDate   = new Date();
+let miniDate  = new Date();
+let view      = 'month';
+let selId     = null;
+let loading   = false;
+
+// ── API CALLS ───────────────────────────────────────────────────────────────
+async function apiFetch(path, opts = {}) {
+  if (!API_URL) return null;
+  const res = await fetch(API_URL + path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': API_KEY, ...(opts.headers||{}) }
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function checkConnection() {
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  if (!API_URL) { txt.textContent = 'Sin configurar'; return; }
+  try {
+    await fetch(API_URL + '/health', { headers: { 'X-Api-Key': API_KEY } });
+    dot.classList.add('online');
+    txt.textContent = 'Conectado';
+  } catch {
+    dot.classList.remove('online');
+    txt.textContent = 'Sin conexión';
+  }
+}
+
+async function loadEvents(desde, hasta) {
+  if (!API_URL) { loadDemo(); return; }
+  try {
+    const data = await apiFetch(`/citas?desde=${desde}&hasta=${hasta}`);
+    eventos = data.citas || [];
+  } catch (e) {
+    toast('Error cargando citas: ' + e.message, true);
+    loadDemo();
+  }
+}
+
+function loadDemo() {
+  const hoy = todayStr();
+  eventos = [
+    { id:1, paciente_nombre:'Ana Rodríguez',   tipo:'limpieza',   doctor:'Dr. García',    fecha:hoy,        hora:'09:00', notas:'Demo - sin API', estado:'confirmada', canal:'whatsapp' },
+    { id:2, paciente_nombre:'Carlos Mendoza',   tipo:'ortodoncia', doctor:'Dra. Martínez', fecha:hoy,        hora:'11:30', notas:'Demo',           estado:'confirmada', canal:'telegram' },
+    { id:3, paciente_nombre:'Lucía Fernández',  tipo:'consulta',   doctor:'Dr. García',    fecha:addDays(hoy,1), hora:'10:00', notas:'',           estado:'confirmada', canal:'web' },
+    { id:4, paciente_nombre:'Pedro Jiménez',    tipo:'extraccion', doctor:'Dr. López',     fecha:addDays(hoy,2), hora:'14:00', notas:'Muela',      estado:'confirmada', canal:'whatsapp' },
+    { id:5, paciente_nombre:'María Vargas',     tipo:'endodoncia', doctor:'Dra. Martínez', fecha:addDays(hoy,5), hora:'08:30', notas:'',           estado:'confirmada', canal:'email' },
+  ];
+}
+
+// ── UTILS ───────────────────────────────────────────────────────────────────
+function todayStr() { return new Date().toISOString().split('T')[0]; }
+function addDays(s, n) { const d = new Date(s); d.setDate(d.getDate()+n); return d.toISOString().split('T')[0]; }
+function fmtDate(s) { const [y,m,d]=s.split('-'); return `${d} de ${MESES[parseInt(m)-1]} ${y}`; }
+function evForDate(d) { return eventos.filter(e => e.fecha === d).sort((a,b)=>a.hora.localeCompare(b.hora)); }
+function weekStart(d) { const s=new Date(d); s.setDate(s.getDate()-s.getDay()); return s; }
+
+// ── RENDER ──────────────────────────────────────────────────────────────────
+async function render() {
+  const lbl = document.getElementById('mainLbl');
+  const body = document.getElementById('calBody');
+  body.innerHTML = `<div class="loading-overlay"><div class="spinner"></div></div>`;
+
+  const y = curDate.getFullYear(), m = curDate.getMonth();
+  let desde, hasta;
+  if (view === 'month') {
+    desde = `${y}-${String(m+1).padStart(2,'0')}-01`;
+    hasta = new Date(y, m+1, 0).toISOString().split('T')[0];
+    lbl.textContent = `${MESES[m]} ${y}`;
+  } else {
+    const ws = weekStart(curDate);
+    const we = new Date(ws); we.setDate(we.getDate()+6);
+    desde = ws.toISOString().split('T')[0];
+    hasta = we.toISOString().split('T')[0];
+    lbl.textContent = `${ws.getDate()} ${MESES[ws.getMonth()]} — ${we.getDate()} ${MESES[we.getMonth()]} ${we.getFullYear()}`;
+  }
+
+  await loadEvents(desde, hasta);
+  body.innerHTML = view === 'month' ? renderMonth(y, m) : renderWeek(weekStart(curDate));
+  renderMini();
+  renderToday();
+}
+
+function renderMonth(y, m) {
+  const first = new Date(y,m,1).getDay();
+  const dim = new Date(y,m+1,0).getDate();
+  const prev = new Date(y,m,0).getDate();
+  const hoy = todayStr();
+  let cells = [];
+  for (let i=first-1;i>=0;i--) cells.push({d:prev-i,mo:m===0?11:m-1,yr:m===0?y-1:y,other:true});
+  for (let d=1;d<=dim;d++) cells.push({d,mo:m,yr:y,other:false});
+  while(cells.length%7!==0){const x=cells.length-dim-first+2;cells.push({d:x,mo:m===11?0:m+1,yr:m===11?y+1:y,other:true});}
+
+  let h = `<div class="cal-grid"><div class="cal-head">${DIAS.map(d=>`<div>${d}</div>`).join('')}</div><div class="cal-body">`;
+  cells.forEach(c => {
+    const ds = `${c.yr}-${String(c.mo+1).padStart(2,'0')}-${String(c.d).padStart(2,'0')}`;
+    const ev = evForDate(ds);
+    const isToday = ds===hoy;
+    h += `<div class="cal-cell${c.other?' other':''}${isToday?' today':''}" onclick="onCellClick('${ds}')">
+      <div class="num">${c.d}</div>
+      ${ev.slice(0,3).map(e=>`<div class="ev-chip ${e.estado==='cancelada'?'t-cancelada':TIPOS[e.tipo]?.cls||''}" onclick="event.stopPropagation();showDetail(${e.id})">${TIPOS[e.tipo]?.icon||''} ${e.paciente_nombre.split(' ')[0]} ${e.hora.slice(0,5)}</div>`).join('')}
+      ${ev.length>3?`<div class="more">+${ev.length-3} más</div>`:''}
+    </div>`;
+  });
+  return h + '</div></div>';
+}
+
+function renderWeek(start) {
+  const hoy = todayStr();
+  const days = Array.from({length:7},(_,i)=>{const d=new Date(start);d.setDate(d.getDate()+i);return d;});
+  let h = `<div class="week-wrap"><div class="week-head"><div></div>`;
+  days.forEach(d=>{
+    const ds = d.toISOString().split('T')[0];
+    h+=`<div class="${ds===hoy?'today-col':''}">${DIAS[d.getDay()]}<br><strong style="font-size:1.1rem">${d.getDate()}</strong></div>`;
+  });
+  h+='</div><div class="week-body">';
+  for(let hr=7;hr<=20;hr++){
+    h+=`<div class="hour-lbl">${hr}:00</div>`;
+    days.forEach(d=>{
+      const ds = d.toISOString().split('T')[0];
+      const isToday = ds===hoy;
+      const ev = eventos.filter(e=>e.fecha===ds&&parseInt(e.hora.split(':')[0])===hr);
+      h+=`<div class="wk-cell${isToday?' today-col':''}" onclick="onCellClick('${ds}','${hr}:00')">
+        ${ev.map(e=>`<div class="wk-ev ${e.estado==='cancelada'?'t-cancelada':TIPOS[e.tipo]?.cls||''}" onclick="event.stopPropagation();showDetail(${e.id})">${TIPOS[e.tipo]?.icon||''} ${e.paciente_nombre.split(' ')[0]}</div>`).join('')}
+      </div>`;
+    });
+  }
+  return h+'</div></div>';
+}
+
+function renderMini() {
+  const y=miniDate.getFullYear(), m=miniDate.getMonth();
+  document.getElementById('miniLbl').textContent=`${MESES[m].slice(0,3)} ${y}`;
+  const first=new Date(y,m,1).getDay(), dim=new Date(y,m+1,0).getDate(), prev=new Date(y,m,0).getDate();
+  const hoy=todayStr();
+  let h=DIAS.map(d=>`<div class="dl">${d[0]}</div>`).join('');
+  let cells=[];
+  for(let i=first-1;i>=0;i--) cells.push({d:prev-i,other:true,mo:m===0?11:m-1,yr:m===0?y-1:y});
+  for(let d=1;d<=dim;d++) cells.push({d,other:false,mo:m,yr:y});
+  while(cells.length%7!==0) cells.push({d:cells.length-dim-first+2,other:true,mo:m+1,yr:y});
+  cells.forEach(c=>{
+    const ds=`${c.yr}-${String(c.mo+1).padStart(2,'0')}-${String(c.d).padStart(2,'0')}`;
+    const hasEv=!c.other&&eventos.some(e=>e.fecha===ds&&e.estado!=='cancelada');
+    const isToday=ds===hoy;
+    h+=`<div class="mini-day${c.other?' other':''}${isToday?' today':''} ${hasEv?'has-ev':''}" onclick="${c.other?'':`jumpTo('${ds}')`}">${c.d}${hasEv?'<span class="dot-ev"></span>':''}</div>`;
+  });
+  document.getElementById('miniGrid').innerHTML=h;
+}
+
+function renderToday() {
+  const ev=evForDate(todayStr());
+  const el=document.getElementById('todayList');
+  if(!ev.length){el.innerHTML=`<div class="no-citas">Sin citas programadas</div>`;return;}
+  el.innerHTML=ev.map(e=>`<div class="agenda-card" onclick="showDetail(${e.id})">
+    <div class="ac-time">${e.hora.slice(0,5)}</div>
+    <div class="ac-name">${e.paciente_nombre}</div>
+    <div class="ac-type">${TIPOS[e.tipo]?.icon||''} ${TIPOS[e.tipo]?.label||e.tipo}</div>
+  </div>`).join('');
+}
+
+// ── NAVIGATION ──────────────────────────────────────────────────────────────
+function nav(d){ view==='month'?curDate.setMonth(curDate.getMonth()+d):curDate.setDate(curDate.getDate()+d*7); render(); }
+function miniNav(d){ miniDate.setMonth(miniDate.getMonth()+d); renderMini(); }
+function setView(v,btn){ view=v; document.querySelectorAll('.vt').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); render(); }
+function jumpTo(ds){ curDate=new Date(ds); miniDate=new Date(ds); render(); }
+function onCellClick(ds,hora=null){ openNew(ds,hora); }
+
+// ── FORM ────────────────────────────────────────────────────────────────────
+function openNew(fecha=null, hora=null){
+  selId=null;
+  document.getElementById('formTitle').textContent='Nueva Cita';
+  document.getElementById('fNombre').value='';
+  document.getElementById('fTel').value='';
+  document.getElementById('fEmail').value='';
+  document.getElementById('fTipo').value='limpieza';
+  document.getElementById('fDoctor').value='Dr. García';
+  document.getElementById('fFecha').value=fecha||todayStr();
+  document.getElementById('fHora').value=hora||'09:00';
+  document.getElementById('fNotas').value='';
+  document.getElementById('btnDel').style.display='none';
+  document.getElementById('formModal').style.display='flex';
+}
+
+function openEdit(ev){
+  selId=ev.id;
+  document.getElementById('formTitle').textContent='Editar Cita';
+  document.getElementById('fNombre').value=ev.paciente_nombre;
+  document.getElementById('fTel').value=ev.paciente_telefono||'';
+  document.getElementById('fEmail').value=ev.paciente_email||'';
+  document.getElementById('fTipo').value=ev.tipo;
+  document.getElementById('fDoctor').value=ev.doctor;
+  document.getElementById('fFecha').value=ev.fecha;
+  document.getElementById('fHora').value=ev.hora.slice(0,5);
+  document.getElementById('fNotas').value=ev.notas||'';
+  document.getElementById('btnDel').style.display='inline-block';
+  document.getElementById('detModal').style.display='none';
+  document.getElementById('formModal').style.display='flex';
+}
+
+async function saveCita(){
+  const nombre=document.getElementById('fNombre').value.trim();
+  if(!nombre){toast('Ingresa el nombre del paciente',true);return;}
+  const btn=document.getElementById('btnSave');
+  btn.disabled=true; btn.textContent='Guardando...';
+  const body={
+    paciente_nombre:nombre,
+    paciente_telefono:document.getElementById('fTel').value||null,
+    paciente_email:document.getElementById('fEmail').value||null,
+    tipo:document.getElementById('fTipo').value,
+    doctor:document.getElementById('fDoctor').value,
+    fecha:document.getElementById('fFecha').value,
+    hora:document.getElementById('fHora').value,
+    notas:document.getElementById('fNotas').value||null,
+    canal:'manual',
+  };
+  try {
+    if(API_URL){
+      if(selId) await apiFetch(`/citas/${selId}`,{method:'PATCH',body:JSON.stringify(body)});
+      else await apiFetch('/citas',{method:'POST',body:JSON.stringify(body)});
+      toast(selId?'✅ Cita actualizada':'✅ Cita creada');
+    } else {
+      // modo demo
+      if(selId){ const i=eventos.findIndex(e=>e.id===selId); eventos[i]={...eventos[i],...body}; }
+      else { eventos.push({id:Date.now(),...body,estado:'confirmada'}); }
+      toast('✅ '+(selId?'Cita actualizada (demo)':'Cita creada (demo)'));
+    }
+    closeModal('formModal'); render();
+  } catch(e){ toast('Error: '+e.message,true); }
+  finally{ btn.disabled=false; btn.textContent='Guardar Cita'; }
+}
+
+async function deleteCita(){
+  if(!confirm('¿Cancelar esta cita?')) return;
+  try{
+    if(API_URL) await apiFetch(`/citas/${selId}`,{method:'DELETE',body:JSON.stringify({motivo:'Cancelada desde panel'})});
+    else { const i=eventos.findIndex(e=>e.id===selId); if(i>-1) eventos[i].estado='cancelada'; }
+    toast('🗑 Cita cancelada'); closeModal('formModal'); render();
+  }catch(e){ toast('Error: '+e.message,true); }
+}
+
+// ── DETAIL ──────────────────────────────────────────────────────────────────
+function showDetail(id){
+  const e=eventos.find(ev=>ev.id===id);
+  if(!e) return;
+  selId=id;
+  const t=TIPOS[e.estado==='cancelada'?'cancelada':e.tipo]||TIPOS.consulta;
+  document.getElementById('dNombre').textContent=e.paciente_nombre;
+  document.getElementById('dBadge').innerHTML=`<div class="badge ${t.cls}" style="background:${t.color}22;color:${t.color}">${t.icon} ${t.label}</div>`;
+  document.getElementById('dBody').innerHTML=[
+    e.paciente_telefono?`<div class="drow"><div class="dic">📞</div><div><div class="dlb">Teléfono</div><div class="dvl">${e.paciente_telefono}</div></div></div>`:'',
+    e.paciente_email?`<div class="drow"><div class="dic">📧</div><div><div class="dlb">Email</div><div class="dvl">${e.paciente_email}</div></div></div>`:'',
+    `<div class="drow"><div class="dic">📅</div><div><div class="dlb">Fecha</div><div class="dvl">${fmtDate(e.fecha)}</div></div></div>`,
+    `<div class="drow"><div class="dic">🕐</div><div><div class="dlb">Hora</div><div class="dvl">${e.hora.slice(0,5)}</div></div></div>`,
+    `<div class="drow"><div class="dic">👨‍⚕️</div><div><div class="dlb">Doctor</div><div class="dvl">${e.doctor}</div></div></div>`,
+    `<div class="drow"><div class="dic">📡</div><div><div class="dlb">Canal</div><div class="dvl">${e.canal||'manual'}</div></div></div>`,
+    e.notas?`<div class="drow"><div class="dic">📝</div><div><div class="dlb">Notas</div><div class="dvl">${e.notas}</div></div></div>`:'',
+  ].join('');
+  document.getElementById('detModal').style.display='flex';
+}
+
+function editFromDet(){ const e=eventos.find(ev=>ev.id===selId); if(e) openEdit(e); }
+async function deleteFromDet(){
+  if(!confirm('¿Cancelar esta cita?')) return;
+  try{
+    if(API_URL) await apiFetch(`/citas/${selId}`,{method:'DELETE',body:JSON.stringify({motivo:'Cancelada desde panel'})});
+    else { const i=eventos.findIndex(e=>e.id===selId); if(i>-1) eventos[i].estado='cancelada'; }
+    toast('🗑 Cita cancelada'); closeModal('detModal'); render();
+  }catch(e){ toast('Error: '+e.message,true); }
+}
+
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+function openConfig(){
+  document.getElementById('cfgUrl').value=API_URL;
+  document.getElementById('cfgKey').value=API_KEY;
+  document.getElementById('cfgModal').style.display='flex';
+}
+async function saveConfig(){
+  API_URL=document.getElementById('cfgUrl').value.trim().replace(/\/$/,'');
+  API_KEY=document.getElementById('cfgKey').value.trim();
+  localStorage.setItem('dc_url',API_URL);
+  localStorage.setItem('dc_key',API_KEY);
+  closeModal('cfgModal');
+  await checkConnection();
+  render();
+  toast('✅ Configuración guardada');
+}
+
+// ── MODALS ──────────────────────────────────────────────────────────────────
+function closeModal(id){ document.getElementById(id).style.display='none'; }
+function closeOverlay(e,id){ if(e.target===document.getElementById(id)) closeModal(id); }
+
+// ── TOAST ───────────────────────────────────────────────────────────────────
+function toast(msg,err=false){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.toggle('err',err);
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+// ── INIT ────────────────────────────────────────────────────────────────────
+checkConnection();
+if(!API_URL) { setTimeout(()=>toast('💡 Configura tu API en ⚙ para conectar con PostgreSQL'),800); }
+render();
+</script>
+</body>
+</html>
