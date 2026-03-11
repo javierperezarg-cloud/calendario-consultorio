@@ -270,6 +270,26 @@ app.post('/buscar', auth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+/**
+ * POST /cancelar — Cancelar cita por ID en el body
+ */
+app.post('/cancelar', auth, async (req, res) => {
+  try {
+    const { cita_id, motivo = null } = req.body;
+    if (!cita_id) return res.status(400).json({ error: 'cita_id es requerido' });
+    
+    const result = await pool.query(
+      `UPDATE citas SET estado = 'cancelada', notas = COALESCE(notas || ' | ', '') || $1, actualizado_en = NOW()
+       WHERE id = $2 RETURNING *`,
+      [motivo ? `Cancelada: ${motivo}` : 'Cancelada', cita_id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Cita no encontrada' });
+    res.json({ success: true, mensaje: 'Cita cancelada', cita: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 // ─── START SERVER ───────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
