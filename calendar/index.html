@@ -219,6 +219,25 @@ header {
 }
 .logout-btn:hover { border-color: var(--accent); color: var(--accent); }
 
+
+/* ── VISTA DÍA COMPLETO ─────────────────────────────────────────────────── */
+.day-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center; }
+.day-modal.open { display:flex; }
+.day-box { background:var(--surface); border:1px solid var(--border); border-radius:16px; width:480px; max-width:95vw; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; }
+.day-box-header { padding:20px 24px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+.day-box-header h2 { font-size:1.2rem; margin:0; color:var(--text1); }
+.day-box-header span { color:var(--text2); font-size:0.85rem; }
+.day-box-body { padding:20px 24px; overflow-y:auto; flex:1; }
+.day-cita-card { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:10px; cursor:pointer; transition:all 0.15s; display:flex; gap:14px; align-items:flex-start; }
+.day-cita-card:hover { border-color:var(--accent); transform:translateX(3px); }
+.day-cita-hora { font-size:1.1rem; font-weight:700; color:var(--accent); min-width:52px; }
+.day-cita-info { flex:1; }
+.day-cita-nombre { font-size:0.95rem; font-weight:600; color:var(--text1); }
+.day-cita-tipo { font-size:0.78rem; color:var(--text2); margin-top:3px; }
+.day-cita-doctor { font-size:0.78rem; color:var(--text2); }
+.day-empty { text-align:center; color:var(--text2); padding:40px 0; font-size:0.9rem; }
+.day-box-footer { padding:14px 24px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+
 </style>
 </head>
 <body>
@@ -379,6 +398,22 @@ header {
   </div>
 </div>
 
+
+
+<!-- VISTA DÍA COMPLETO -->
+<div class="day-modal" id="dayModal" onclick="if(event.target===this)closeDayModal()">
+  <div class="day-box">
+    <div class="day-box-header">
+      <h2 id="dayModalTitle">Citas del día</h2>
+      <button onclick="closeDayModal()" style="background:none;border:none;color:var(--text2);font-size:1.3rem;cursor:pointer;">✕</button>
+    </div>
+    <div class="day-box-body" id="dayModalBody"></div>
+    <div class="day-box-footer">
+      <span id="dayModalCount" style="color:var(--text2);font-size:0.85rem;"></span>
+      <button class="btn-new" style="padding:8px 18px;font-size:0.85rem;" onclick="closeDayModal();openNew(currentDayModal)">+ Nueva cita</button>
+    </div>
+  </div>
+</div>
 
 <!-- LOGIN OVERLAY -->
 <div class="login-overlay" id="loginOverlay">
@@ -582,7 +617,7 @@ function renderMini() {
     const ds=`${c.yr}-${String(c.mo+1).padStart(2,'0')}-${String(c.d).padStart(2,'0')}`;
     const hasEv=!c.other&&eventos.some(e=>e.fecha.toString().split('T')[0]===ds&&e.estado!=='cancelada');
     const isToday=ds===hoy;
-    h+=`<div class="mini-day${c.other?' other':''}${isToday?' today':''} ${hasEv?'has-ev':''}" onclick="${c.other?'':`jumpTo('${ds}')`}">${c.d}${hasEv?'<span class="dot-ev"></span>':''}</div>`;
+    h+=`<div class="mini-day${c.other?' other':''}${isToday?' today':''} ${hasEv?'has-ev':''}" onclick="${c.other?'':`openDayModal('${ds}')`}">${c.d}${hasEv?'<span class="dot-ev"></span>':''}</div>`;
   });
   document.getElementById('miniGrid').innerHTML=h;
 }
@@ -758,6 +793,41 @@ function toast(msg,err=false){
 checkConnection();
 if(!API_URL) { setTimeout(()=>toast('💡 Configura tu API en ⚙ para conectar con PostgreSQL'),800); }
 
+
+
+// ── VISTA DÍA COMPLETO ───────────────────────────────────────────────────────
+let currentDayModal = null;
+
+function openDayModal(ds) {
+  currentDayModal = ds;
+  const ev = evForDate(ds).filter(e => e.estado !== 'cancelada');
+  const [y,m,d] = ds.split('-');
+  document.getElementById('dayModalTitle').textContent = `${d} de ${MESES[parseInt(m)-1]} ${y}`;
+  const count = ev.length;
+  document.getElementById('dayModalCount').textContent = count === 0 ? 'Sin citas' : `${count} cita${count>1?'s':''}`;
+
+  if (!ev.length) {
+    document.getElementById('dayModalBody').innerHTML = `<div class="day-empty">📅 No hay citas programadas para este día.</div>`;
+  } else {
+    document.getElementById('dayModalBody').innerHTML = ev.map(e => {
+      const t = TIPOS[e.tipo] || TIPOS.consulta;
+      return `<div class="day-cita-card" onclick="closeDayModal();showDetail(${e.id})">
+        <div class="day-cita-hora">${e.hora.slice(0,5)}</div>
+        <div class="day-cita-info">
+          <div class="day-cita-nombre">${e.paciente_nombre}</div>
+          <div class="day-cita-tipo">${t.icon} ${t.label}</div>
+          <div class="day-cita-doctor">👨‍⚕️ ${e.doctor}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('dayModal').classList.add('open');
+  renderToday(ds);
+}
+
+function closeDayModal() {
+  document.getElementById('dayModal').classList.remove('open');
+}
 
 // ── LOGIN / LOGOUT ───────────────────────────────────────────────────────────
 function showLogin() {
