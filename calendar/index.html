@@ -492,7 +492,7 @@ async function checkConnection() {
   const txt = document.getElementById('statusText');
   
   try {
-    await fetch(API_URL + '/health', { headers: { 'X-Api-Key': API_KEY } });
+    await fetch(API_URL + '/health', { headers: { 'Authorization': 'Bearer ' + JWT_TOKEN } });
     dot.classList.add('online');
     txt.textContent = 'Conectado';
   } catch {
