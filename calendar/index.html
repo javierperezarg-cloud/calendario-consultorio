@@ -618,10 +618,7 @@ function jumpTo(ds){ curDate=new Date(ds); miniDate=new Date(ds); render(); }
 function showDayEvents(ds){
   // Siempre actualizar el panel lateral con las citas del día
   renderToday(ds);
-  const evDia=eventos.filter(e=>e.fecha.toString().split('T')[0]===ds && e.estado!=='cancelada');
-  if(evDia.length===0){ openNew(ds); return; }
-  // Con 1 o más citas solo actualizar el panel, no abrir modal automáticamente
-  jumpTo(ds);
+  // Nunca abrir modal al clickear un día — solo mostrar en panel lateral
 }
 function onCellClick(ds,hora=null){ showDayEvents(ds); }
 
