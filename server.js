@@ -2,20 +2,22 @@
  * DentaCal API — Sistema de Citas Odontológicas
  * Stack: Node.js + Express + PostgreSQL (pg)
  *
- * Instalar: npm install express pg cors dotenv
+ * Instalar: npm install express pg cors dotenv bcryptjs jsonwebtoken
  * Correr:   node server.js
  */
 
 require('dotenv').config();
-const express = require('express');
-const { Pool } = require('pg');
-const cors = require('cors');
+const express    = require('express');
+const { Pool }   = require('pg');
+const cors       = require('cors');
+const bcrypt     = require('bcryptjs');
+const jwt        = require('jsonwebtoken');
 
 const app = express();
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'X-Api-Key']
+  allowedHeaders: ['Content-Type', 'X-Api-Key', 'Authorization']
 }));
 app.use(express.json());
 
@@ -31,16 +33,49 @@ const pool = new Pool({
   port:     process.env.DB_PORT     || 5432,
   database: process.env.DB_NAME     || 'dentacal',
   user:     process.env.DB_USER     || 'postgres',
-  password: process.env.DB_PASSWORD || 'tu_password',
+  password: process.env.DB_PASSWORD || 'Ebarcas88*',
 });
 
-// ─── MIDDLEWARE: API KEY simple ─────────────────────────────────────────────
-const API_KEY = process.env.API_KEY || 'dentacal-secret-2024';
+// ─── CLAVES ─────────────────────────────────────────────────────────────────
+const API_KEY   = process.env.API_KEY   || 'dentacal-secret-2024';
+const JWT_SECRET = process.env.JWT_SECRET || 'dentacal-jwt-95624378';
 
+// ─── MIDDLEWARE: API KEY (para n8n) ─────────────────────────────────────────
 function auth(req, res, next) {
   const key = req.headers['x-api-key'];
   if (key !== API_KEY) return res.status(401).json({ error: 'No autorizado' });
   next();
+}
+
+// ─── MIDDLEWARE: JWT (para el calendario) ───────────────────────────────────
+function authJWT(req, res, next) {
+  const header = req.headers['authorization'];
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Token requerido' });
+  }
+  const token = header.split(' ')[1];
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.usuario = payload;
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Token inválido o expirado' });
+  }
+}
+
+// ─── MIDDLEWARE: API KEY O JWT (acepta ambos) ────────────────────────────────
+function authAny(req, res, next) {
+  const key    = req.headers['x-api-key'];
+  const header = req.headers['authorization'];
+  if (key === API_KEY) return next();
+  if (header && header.startsWith('Bearer ')) {
+    const token = header.split(' ')[1];
+    try {
+      req.usuario = jwt.verify(token, JWT_SECRET);
+      return next();
+    } catch {}
+  }
+  return res.status(401).json({ error: 'No autorizado' });
 }
 
 // ─── HEALTH CHECK ───────────────────────────────────────────────────────────
@@ -48,24 +83,73 @@ app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() 
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-// ENDPOINTS DE CITAS
+// AUTENTICACIÓN DEL CALENDARIO
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /login
+ * Body: { usuario, password }
+ */
+app.post('/login', async (req, res) => {
+  try {
+    const { usuario, password } = req.body;
+    if (!usuario || !password) {
+      return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
+    }
+
+    // Buscar usuario — query parametrizada, sin SQL injection
+    const result = await pool.query(
+      'SELECT * FROM usuarios WHERE usuario = $1 AND activo = true',
+      [usuario.toLowerCase().trim()]
+    );
+
+    if (!result.rows.length) {
+      return res.status(401).json({ error: 'Credenciales incorrectas' });
+    }
+
+    const user = result.rows[0];
+    const passwordOk = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordOk) {
+      return res.status(401).json({ error: 'Credenciales incorrectas' });
+    }
+
+    // Generar token JWT — expira en 8 horas
+    const token = jwt.sign(
+      { id: user.id, usuario: user.usuario, nombre: user.nombre },
+      JWT_SECRET,
+      { expiresIn: '8h' }
+    );
+
+    res.json({
+      success: true,
+      token,
+      usuario: { id: user.id, nombre: user.nombre, usuario: user.usuario }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ENDPOINTS DE CITAS (acepta API Key de n8n o JWT del calendario)
 // ══════════════════════════════════════════════════════════════════════════════
 
 /**
  * GET /citas
- * ?fecha=2026-03-10 | ?desde=&hasta= | ?estado= | ?paciente=
  */
-app.get('/citas', auth, async (req, res) => {
+app.get('/citas', authAny, async (req, res) => {
   try {
     const { fecha, desde, hasta, estado, paciente } = req.query;
     let query = 'SELECT * FROM citas WHERE 1=1';
     const params = [];
     let i = 1;
 
-    if (fecha)    { query += ` AND fecha::date = $${i++}`;    params.push(normalizarFecha(fecha)); }
-    if (desde)    { query += ` AND fecha::date >= $${i++}`;   params.push(normalizarFecha(desde)); }
-    if (hasta)    { query += ` AND fecha::date <= $${i++}`;   params.push(normalizarFecha(hasta)); }
-    if (estado)   { query += ` AND estado = $${i++}`;         params.push(estado); }
+    if (fecha)    { query += ` AND fecha::date = $${i++}`;         params.push(normalizarFecha(fecha)); }
+    if (desde)    { query += ` AND fecha::date >= $${i++}`;        params.push(normalizarFecha(desde)); }
+    if (hasta)    { query += ` AND fecha::date <= $${i++}`;        params.push(normalizarFecha(hasta)); }
+    if (estado)   { query += ` AND estado = $${i++}`;              params.push(estado); }
     if (paciente) { query += ` AND paciente_nombre ILIKE $${i++}`; params.push(`%${paciente}%`); }
 
     query += ' ORDER BY fecha ASC, hora ASC';
@@ -81,7 +165,7 @@ app.get('/citas', auth, async (req, res) => {
 /**
  * GET /citas/:id
  */
-app.get('/citas/:id', auth, async (req, res) => {
+app.get('/citas/:id', authAny, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM citas WHERE id = $1', [req.params.id]);
     if (!result.rows.length) return res.status(404).json({ error: 'Cita no encontrada' });
@@ -95,7 +179,7 @@ app.get('/citas/:id', auth, async (req, res) => {
 /**
  * POST /citas — Crear nueva cita
  */
-app.post('/citas', auth, async (req, res) => {
+app.post('/citas', authAny, async (req, res) => {
   try {
     let {
       paciente_nombre,
@@ -110,21 +194,16 @@ app.post('/citas', auth, async (req, res) => {
       canal = 'manual',
     } = req.body;
 
-    // Normalizar datos — quitar el = que a veces agrega n8n
     if (paciente_nombre) paciente_nombre = paciente_nombre.replace(/^=/, '').trim();
     if (tipo)            tipo            = tipo.replace(/^=/, '').trim();
     if (doctor)          doctor          = doctor.replace(/^=/, '').trim();
-
-    // Normalizar fecha
     fecha = normalizarFecha(fecha);
 
-    // Validaciones
     if (!paciente_nombre) return res.status(400).json({ error: 'paciente_nombre es requerido' });
     if (!tipo)            return res.status(400).json({ error: 'tipo es requerido' });
     if (!fecha)           return res.status(400).json({ error: 'fecha es requerida' });
     if (!hora)            return res.status(400).json({ error: 'hora es requerida' });
 
-    // Verificar disponibilidad
     const conflict = await pool.query(
       `SELECT id FROM citas WHERE doctor = $1 AND fecha::date = $2 AND hora = $3 AND estado != 'cancelada'`,
       [doctor, fecha, hora]
@@ -151,9 +230,9 @@ app.post('/citas', auth, async (req, res) => {
 
 
 /**
- * PATCH /citas/:id — Editar o reagendar
+ * PATCH /citas/:id
  */
-app.patch('/citas/:id', auth, async (req, res) => {
+app.patch('/citas/:id', authAny, async (req, res) => {
   try {
     const campos = ['paciente_nombre','paciente_telefono','paciente_email','tipo','doctor','fecha','hora','duracion_min','notas','estado'];
     const updates = [];
@@ -187,9 +266,9 @@ app.patch('/citas/:id', auth, async (req, res) => {
 
 
 /**
- * DELETE /citas/:id — Soft delete (cambia estado a cancelada)
+ * DELETE /citas/:id
  */
-app.delete('/citas/:id', auth, async (req, res) => {
+app.delete('/citas/:id', authAny, async (req, res) => {
   try {
     const { motivo = null } = req.body || {};
     const result = await pool.query(
@@ -206,14 +285,14 @@ app.delete('/citas/:id', auth, async (req, res) => {
 
 
 /**
- * GET /disponibilidad?fecha=YYYY-MM-DD&doctor=Dr. García&duracion=30
+ * GET /disponibilidad
  */
-app.get('/disponibilidad', auth, async (req, res) => {
+app.get('/disponibilidad', authAny, async (req, res) => {
   try {
     const { fecha, doctor, duracion = 30 } = req.query;
     if (!fecha || !doctor) return res.status(400).json({ error: 'fecha y doctor son requeridos' });
 
-    const fechaNorm = normalizarFecha(fecha);
+    const fechaNorm  = normalizarFecha(fecha);
     const HORA_INICIO = 8;
     const HORA_FIN    = 18;
     const INTERVALO   = parseInt(duracion);
@@ -242,7 +321,7 @@ app.get('/disponibilidad', auth, async (req, res) => {
 /**
  * GET /doctores
  */
-app.get('/doctores', auth, async (req, res) => {
+app.get('/doctores', authAny, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM doctores ORDER BY nombre');
     res.json(result.rows);
@@ -251,6 +330,7 @@ app.get('/doctores', auth, async (req, res) => {
   }
 });
 
+
 /**
  * POST /buscar — Buscar citas por nombre de paciente
  */
@@ -258,18 +338,19 @@ app.post('/buscar', auth, async (req, res) => {
   try {
     const paciente = req.body.paciente_nombre || req.body.paciente;
     if (!paciente) return res.status(400).json({ error: 'paciente_nombre es requerido' });
-    
+
     const result = await pool.query(
-  `SELECT * FROM citas 
-   WHERE unaccent(lower(paciente_nombre)) ILIKE unaccent(lower($1)) 
-   AND estado != 'cancelada' ORDER BY fecha ASC`,
-  [`%${paciente}%`]
-);
+      `SELECT * FROM citas 
+       WHERE unaccent(lower(paciente_nombre)) ILIKE unaccent(lower($1)) 
+       AND estado != 'cancelada' ORDER BY fecha ASC`,
+      [`%${paciente}%`]
+    );
     res.json({ citas: result.rows, total: result.rowCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 /**
  * POST /cancelar — Cancelar cita por ID en el body
@@ -278,7 +359,7 @@ app.post('/cancelar', auth, async (req, res) => {
   try {
     const { cita_id, motivo = null } = req.body;
     if (!cita_id) return res.status(400).json({ error: 'cita_id es requerido' });
-    
+
     const result = await pool.query(
       `UPDATE citas SET estado = 'cancelada', notas = COALESCE(notas || ' | ', '') || $1, actualizado_en = NOW()
        WHERE id = $2 RETURNING *`,
@@ -290,6 +371,8 @@ app.post('/cancelar', auth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+
 // ─── START SERVER ───────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
