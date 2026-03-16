@@ -249,7 +249,7 @@ header {
       <div class="mini-grid" id="miniGrid"></div>
     </div>
     <div>
-      <p class="section-label">Citas de hoy</p>
+      <p class="section-label" id="todayLabel">Citas de hoy</p>
       <div id="todayList"></div>
     </div>
     <div>
@@ -470,6 +470,8 @@ async function loadEvents(desde, hasta) {
   try {
     const data = await apiFetch(`/citas?desde=${desde}&hasta=${hasta}`);
     eventos = data.citas || [];
+    render();
+    renderToday();
   } catch (e) {
     toast('Error cargando citas: ' + e.message, true);
     loadDemo();
@@ -586,9 +588,21 @@ function renderMini() {
   document.getElementById('miniGrid').innerHTML=h;
 }
 
-function renderToday() {
-  const ev=evForDate(todayStr());
-  const el=document.getElementById('todayList');
+function renderToday(ds=null) {
+  const fecha = ds || todayStr();
+  const ev = evForDate(fecha);
+  const el = document.getElementById('todayList');
+  const lbl = document.getElementById('todayLabel');
+  // Actualizar título
+  const esHoy = fecha === todayStr();
+  if (lbl) {
+    if (esHoy) {
+      lbl.textContent = 'Citas de hoy';
+    } else {
+      const [y,m,d] = fecha.split('-');
+      lbl.textContent = `Citas del ${d}/${m}/${y}`;
+    }
+  }
   if(!ev.length){el.innerHTML=`<div class="no-citas">Sin citas programadas</div>`;return;}
   el.innerHTML=ev.map(e=>`<div class="agenda-card" onclick="showDetail(${e.id})">
     <div class="ac-time">${e.hora.slice(0,5)}</div>
@@ -603,9 +617,11 @@ function miniNav(d){ miniDate.setMonth(miniDate.getMonth()+d); renderMini(); }
 function setView(v,btn){ view=v; document.querySelectorAll('.vt').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); render(); }
 function jumpTo(ds){ curDate=new Date(ds); miniDate=new Date(ds); render(); }
 function showDayEvents(ds){
+  // Siempre actualizar el panel lateral con las citas del día
+  renderToday(ds);
   const evDia=eventos.filter(e=>e.fecha.toString().split('T')[0]===ds && e.estado!=='cancelada');
   if(evDia.length===0){ openNew(ds); return; }
-  if(evDia.length===1){ showDetail(evDia[0].id); return; }
+  // Con 1 o más citas solo actualizar el panel, no abrir modal automáticamente
   jumpTo(ds);
 }
 function onCellClick(ds,hora=null){ showDayEvents(ds); }
