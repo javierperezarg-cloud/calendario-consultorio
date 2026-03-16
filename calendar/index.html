@@ -470,7 +470,6 @@ async function loadEvents(desde, hasta) {
   try {
     const data = await apiFetch(`/citas?desde=${desde}&hasta=${hasta}`);
     eventos = data.citas || [];
-    render();
     renderToday();
   } catch (e) {
     toast('Error cargando citas: ' + e.message, true);
