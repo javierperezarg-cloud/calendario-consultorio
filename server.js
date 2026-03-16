@@ -2,24 +2,61 @@
  * DentaCal API — Sistema de Citas Odontológicas
  * Stack: Node.js + Express + PostgreSQL (pg)
  *
- * Instalar: npm install express pg cors dotenv bcryptjs jsonwebtoken
+ * Instalar: npm install express pg cors dotenv bcryptjs jsonwebtoken express-rate-limit
  * Correr:   node server.js
  */
 
 require('dotenv').config();
-const express    = require('express');
-const { Pool }   = require('pg');
-const cors       = require('cors');
-const bcrypt     = require('bcryptjs');
-const jwt        = require('jsonwebtoken');
+const express      = require('express');
+const { Pool }     = require('pg');
+const cors         = require('cors');
+const bcrypt       = require('bcryptjs');
+const jwt          = require('jsonwebtoken');
+const rateLimit    = require('express-rate-limit');
 
 const app = express();
+
+// ─── CORS — solo permite el dominio del calendario ──────────────────────────
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: '*',
+  origin: function(origin, callback) {
+    // Permitir requests sin origin (n8n, curl, Postman)
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    return callback(new Error('CORS: origen no permitido'));
+  },
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'X-Api-Key', 'Authorization']
 }));
-app.use(express.json());
+
+app.use(express.json({ limit: '10kb' })); // limitar tamaño del body
+
+// ─── RATE LIMITING ───────────────────────────────────────────────────────────
+
+// Login: máximo 10 intentos por 15 minutos por IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Demasiados intentos. Espera 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// API general: máximo 200 requests por minuto por IP
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  message: { error: 'Demasiadas solicitudes. Intenta en un momento.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/login', loginLimiter);
+app.use('/api', apiLimiter);
 
 // ─── HELPER: normalizar fecha a YYYY-MM-DD ──────────────────────────────────
 function normalizarFecha(fecha) {
@@ -33,17 +70,23 @@ const pool = new Pool({
   port:     process.env.DB_PORT     || 5432,
   database: process.env.DB_NAME     || 'dentacal',
   user:     process.env.DB_USER     || 'postgres',
-  password: process.env.DB_PASSWORD || 'Ebarcas88*',
+  password: process.env.DB_PASSWORD || '',
 });
 
 // ─── CLAVES ─────────────────────────────────────────────────────────────────
-const API_KEY   = process.env.API_KEY   || 'dentacal-secret-2024';
-const JWT_SECRET = process.env.JWT_SECRET || 'dentacal-jwt-95624378';
+const API_KEY    = process.env.API_KEY;
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// Verificar que las claves críticas estén configuradas
+if (!API_KEY || !JWT_SECRET) {
+  console.error('❌ ERROR: API_KEY y JWT_SECRET son requeridos como variables de entorno');
+  process.exit(1);
+}
 
 // ─── MIDDLEWARE: API KEY (para n8n) ─────────────────────────────────────────
 function auth(req, res, next) {
   const key = req.headers['x-api-key'];
-  if (key !== API_KEY) return res.status(401).json({ error: 'No autorizado' });
+  if (!key || key !== API_KEY) return res.status(401).json({ error: 'No autorizado' });
   next();
 }
 
@@ -55,8 +98,7 @@ function authJWT(req, res, next) {
   }
   const token = header.split(' ')[1];
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    req.usuario = payload;
+    req.usuario = jwt.verify(token, JWT_SECRET);
     next();
   } catch {
     return res.status(401).json({ error: 'Token inválido o expirado' });
@@ -67,7 +109,7 @@ function authJWT(req, res, next) {
 function authAny(req, res, next) {
   const key    = req.headers['x-api-key'];
   const header = req.headers['authorization'];
-  if (key === API_KEY) return next();
+  if (key && key === API_KEY) return next();
   if (header && header.startsWith('Bearer ')) {
     const token = header.split(' ')[1];
     try {
@@ -78,43 +120,42 @@ function authAny(req, res, next) {
   return res.status(401).json({ error: 'No autorizado' });
 }
 
-// ─── HEALTH CHECK ───────────────────────────────────────────────────────────
-app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
+// ─── HEALTH CHECK (con auth para no exponer info) ───────────────────────────
+app.get('/health', authAny, (req, res) => res.json({ status: 'ok' }));
+
+// Health público mínimo — solo para EasyPanel
+app.get('/ping', (req, res) => res.json({ ok: true }));
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-// AUTENTICACIÓN DEL CALENDARIO
+// AUTENTICACIÓN
 // ══════════════════════════════════════════════════════════════════════════════
 
-/**
- * POST /login
- * Body: { usuario, password }
- */
-app.post('/login', async (req, res) => {
+app.post('/login', loginLimiter, async (req, res) => {
   try {
     const { usuario, password } = req.body;
     if (!usuario || !password) {
       return res.status(400).json({ error: 'Usuario y contraseña son requeridos' });
     }
 
-    // Buscar usuario — query parametrizada, sin SQL injection
+    // Sanitizar input
+    const usuarioClean = usuario.toLowerCase().trim().substring(0, 50);
+
     const result = await pool.query(
       'SELECT * FROM usuarios WHERE usuario = $1 AND activo = true',
-      [usuario.toLowerCase().trim()]
+      [usuarioClean]
     );
 
-    if (!result.rows.length) {
+    // Siempre comparar hash aunque no exista usuario (evita timing attacks)
+    const dummyHash = '$2b$10$abcdefghijklmnopqrstuvuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu';
+    const hash = result.rows[0]?.password_hash || dummyHash;
+    const passwordOk = await bcrypt.compare(password, hash);
+
+    if (!result.rows.length || !passwordOk) {
       return res.status(401).json({ error: 'Credenciales incorrectas' });
     }
 
     const user = result.rows[0];
-    const passwordOk = await bcrypt.compare(password, user.password_hash);
-
-    if (!passwordOk) {
-      return res.status(401).json({ error: 'Credenciales incorrectas' });
-    }
-
-    // Generar token JWT — expira en 8 horas
     const token = jwt.sign(
       { id: user.id, usuario: user.usuario, nombre: user.nombre },
       JWT_SECRET,
@@ -127,18 +168,16 @@ app.post('/login', async (req, res) => {
       usuario: { id: user.id, nombre: user.nombre, usuario: user.usuario }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Login error:', err.message);
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-// ENDPOINTS DE CITAS (acepta API Key de n8n o JWT del calendario)
+// ENDPOINTS DE CITAS
 // ══════════════════════════════════════════════════════════════════════════════
 
-/**
- * GET /citas
- */
 app.get('/citas', authAny, async (req, res) => {
   try {
     const { fecha, desde, hasta, estado, paciente } = req.query;
@@ -153,45 +192,32 @@ app.get('/citas', authAny, async (req, res) => {
     if (paciente) { query += ` AND paciente_nombre ILIKE $${i++}`; params.push(`%${paciente}%`); }
 
     query += ' ORDER BY fecha ASC, hora ASC';
-
     const result = await pool.query(query, params);
     res.json({ citas: result.rows, total: result.rowCount });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
 
-/**
- * GET /citas/:id
- */
 app.get('/citas/:id', authAny, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM citas WHERE id = $1', [req.params.id]);
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' });
+    const result = await pool.query('SELECT * FROM citas WHERE id = $1', [id]);
     if (!result.rows.length) return res.status(404).json({ error: 'Cita no encontrada' });
     res.json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
 
-/**
- * POST /citas — Crear nueva cita
- */
 app.post('/citas', authAny, async (req, res) => {
   try {
     let {
-      paciente_nombre,
-      paciente_telefono = null,
-      paciente_email    = null,
-      tipo,
-      doctor,
-      fecha,
-      hora,
-      duracion_min = 30,
-      notas = null,
-      canal = 'manual',
+      paciente_nombre, paciente_telefono = null, paciente_email = null,
+      tipo, doctor, fecha, hora, duracion_min = 30, notas = null, canal = 'manual',
     } = req.body;
 
     if (paciente_nombre) paciente_nombre = paciente_nombre.replace(/^=/, '').trim();
@@ -218,25 +244,20 @@ app.post('/citas', authAny, async (req, res) => {
       [paciente_nombre, paciente_telefono, paciente_email, tipo, doctor, fecha, hora, duracion_min, notas, canal]
     );
 
-    res.status(201).json({
-      success: true,
-      cita: result.rows[0],
-      mensaje: `Cita creada para ${paciente_nombre} el ${fecha} a las ${hora}`
-    });
+    res.status(201).json({ success: true, cita: result.rows[0], mensaje: `Cita creada para ${paciente_nombre} el ${fecha} a las ${hora}` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
 
-/**
- * PATCH /citas/:id
- */
 app.patch('/citas/:id', authAny, async (req, res) => {
   try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' });
+
     const campos = ['paciente_nombre','paciente_telefono','paciente_email','tipo','doctor','fecha','hora','duracion_min','notas','estado'];
-    const updates = [];
-    const values  = [];
+    const updates = [], values = [];
     let i = 1;
 
     for (const campo of campos) {
@@ -250,51 +271,46 @@ app.patch('/citas/:id', authAny, async (req, res) => {
 
     if (!updates.length) return res.status(400).json({ error: 'No hay campos para actualizar' });
     updates.push(`actualizado_en = NOW()`);
-    values.push(req.params.id);
+    values.push(id);
 
     const result = await pool.query(
-      `UPDATE citas SET ${updates.join(', ')} WHERE id = $${i} RETURNING *`,
-      values
+      `UPDATE citas SET ${updates.join(', ')} WHERE id = $${i} RETURNING *`, values
     );
 
     if (!result.rows.length) return res.status(404).json({ error: 'Cita no encontrada' });
     res.json({ success: true, cita: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
 
-/**
- * DELETE /citas/:id
- */
 app.delete('/citas/:id', authAny, async (req, res) => {
   try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' });
+
     const { motivo = null } = req.body || {};
     const result = await pool.query(
       `UPDATE citas SET estado = 'cancelada', notas = COALESCE(notas || ' | ', '') || $1, actualizado_en = NOW()
        WHERE id = $2 RETURNING *`,
-      [motivo ? `Cancelada: ${motivo}` : 'Cancelada', req.params.id]
+      [motivo ? `Cancelada: ${motivo}` : 'Cancelada', id]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Cita no encontrada' });
     res.json({ success: true, mensaje: 'Cita cancelada', cita: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
 
-/**
- * GET /disponibilidad
- */
 app.get('/disponibilidad', authAny, async (req, res) => {
   try {
     const { fecha, doctor, duracion = 30 } = req.query;
     if (!fecha || !doctor) return res.status(400).json({ error: 'fecha y doctor son requeridos' });
 
-    const fechaNorm  = normalizarFecha(fecha);
-    const HORA_INICIO = 8;
-    const HORA_FIN    = 18;
+    const fechaNorm   = normalizarFecha(fecha);
+    const HORA_INICIO = 8, HORA_FIN = 18;
     const INTERVALO   = parseInt(duracion);
 
     const ocupadas = await pool.query(
@@ -313,27 +329,21 @@ app.get('/disponibilidad', authAny, async (req, res) => {
 
     res.json({ fecha: fechaNorm, doctor, disponibles: slots, ocupadas: horasOcupadas });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
 
-/**
- * GET /doctores
- */
 app.get('/doctores', authAny, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM doctores ORDER BY nombre');
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
 
-/**
- * POST /buscar — Buscar citas por nombre de paciente
- */
 app.post('/buscar', auth, async (req, res) => {
   try {
     const paciente = req.body.paciente_nombre || req.body.paciente;
@@ -347,19 +357,17 @@ app.post('/buscar', auth, async (req, res) => {
     );
     res.json({ citas: result.rows, total: result.rowCount });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
 
-/**
- * POST /cancelar — Cancelar cita por ID en el body
- */
 app.post('/cancelar', auth, async (req, res) => {
   try {
-    const { cita_id, motivo = null } = req.body;
-    if (!cita_id) return res.status(400).json({ error: 'cita_id es requerido' });
+    const cita_id = parseInt(req.body.cita_id);
+    if (!cita_id || isNaN(cita_id)) return res.status(400).json({ error: 'cita_id es requerido' });
 
+    const { motivo = null } = req.body;
     const result = await pool.query(
       `UPDATE citas SET estado = 'cancelada', notas = COALESCE(notas || ' | ', '') || $1, actualizado_en = NOW()
        WHERE id = $2 RETURNING *`,
@@ -368,7 +376,7 @@ app.post('/cancelar', auth, async (req, res) => {
     if (!result.rows.length) return res.status(404).json({ error: 'Cita no encontrada' });
     res.json({ success: true, mensaje: 'Cita cancelada', cita: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
@@ -377,5 +385,4 @@ app.post('/cancelar', auth, async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ DentaCal API corriendo en puerto ${PORT}`);
-  console.log(`   Health: http://localhost:${PORT}/health`);
 });
