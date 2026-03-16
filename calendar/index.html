@@ -559,7 +559,7 @@ function renderWeek(start) {
     days.forEach(d=>{
       const ds = d.toISOString().split('T')[0];
       const isToday = ds===hoy;
-      const ev = eventos.filter(e=>e.fecha===ds&&parseInt(e.hora.split(':')[0])===hr);
+      const ev = eventos.filter(e=>e.fecha.toString().split('T')[0]===ds&&parseInt(e.hora.split(':')[0])===hr);
       h+=`<div class="wk-cell${isToday?' today-col':''}" onclick="onCellClick('${ds}','${hr}:00')">
         ${ev.map(e=>`<div class="wk-ev ${e.estado==='cancelada'?'t-cancelada':TIPOS[e.tipo]?.cls||''}" onclick="event.stopPropagation();showDetail(${e.id})">${TIPOS[e.tipo]?.icon||''} ${e.paciente_nombre.split(' ')[0]}</div>`).join('')}
       </div>`;
