@@ -249,7 +249,7 @@ header {
       <div class="dot" id="statusDot"></div>
       <span id="statusText">Conectando...</span>
     </div>
-    <button class="btn-config" onclick="openConfig()">⚙ API</button>
+    
     <button class="logout-btn" onclick="doLogout()" id="logoutBtn" style="display:none">Salir</button> <button class="btn-new" onclick="openNew()">+ Nueva Cita</button>
   </div>
 </header>
@@ -301,7 +301,7 @@ header {
 </div>
 
 <!-- CONFIG MODAL -->
-<div class="overlay" id="cfgModal" style="display:none" onclick="closeOverlay(event,'cfgModal')">
+<div class="overlay" id="cfgModal" style="display:none!important" onclick="closeOverlay(event,'cfgModal')">
   <div class="modal" onclick="event.stopPropagation()" style="max-width:400px">
     <h3>Configurar API</h3>
     <div class="fg">
@@ -439,8 +439,10 @@ header {
 
 <script>
 // ── CONFIG ──────────────────────────────────────────────────────────────────
-let API_URL = localStorage.getItem('dc_url') || '';
-let API_KEY = localStorage.getItem('dc_key') || '';
+// ── CONFIGURACIÓN (hardcodeada por administrador) ────────────────────────────
+const API_URL = 'https://dentacal-dentacal-api.unvhg3.easypanel.host';
+const API_KEY  = 'dentacal-secret-2024';
+let JWT_TOKEN  = sessionStorage.getItem('dc_token') || '';
 let JWT_TOKEN = sessionStorage.getItem('dc_token') || '';
 
 const TIPOS = {
@@ -489,7 +491,7 @@ async function apiFetch(path, opts = {}) {
 async function checkConnection() {
   const dot = document.getElementById('statusDot');
   const txt = document.getElementById('statusText');
-  if (!API_URL) { txt.textContent = 'Sin configurar'; return; }
+  
   try {
     await fetch(API_URL + '/health', { headers: { 'X-Api-Key': API_KEY } });
     dot.classList.add('online');
@@ -791,7 +793,7 @@ function toast(msg,err=false){
 
 // ── INIT ────────────────────────────────────────────────────────────────────
 checkConnection();
-if(!API_URL) { setTimeout(()=>toast('💡 Configura tu API en ⚙ para conectar con PostgreSQL'),800); }
+// API configurada por administrador
 
 
 
