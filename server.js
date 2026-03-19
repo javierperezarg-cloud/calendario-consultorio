@@ -238,16 +238,41 @@ app.post('/citas', authAny, async (req, res) => {
       return res.status(409).json({ error: 'Horario no disponible', cita_id: conflict.rows[0].id });
     }
 
-    const result = await pool.query(
-      `INSERT INTO citas (paciente_nombre, paciente_telefono, paciente_email, tipo, doctor, fecha, hora, duracion_min, notas, canal, estado)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'confirmada') RETURNING *`,
-      [paciente_nombre, paciente_telefono, paciente_email, tipo, doctor, fecha, hora, duracion_min, notas, canal]
+    // Buscar o crear paciente automáticamente
+let paciente_id = null;
+if (paciente_nombre) {
+  const pacExist = await pool.query(
+    `SELECT id FROM pacientes WHERE unaccent(lower(nombre)) = unaccent(lower($1)) LIMIT 1`,
+    [paciente_nombre]
+  );
+  if (pacExist.rows.length) {
+    paciente_id = pacExist.rows[0].id;
+    // Actualizar telefono si cambio
+    if (paciente_telefono) {
+      await pool.query(
+        'UPDATE pacientes SET telefono = $1, actualizado_en = NOW() WHERE id = $2',
+        [paciente_telefono, paciente_id]
+      );
+    }
+  } else {
+    const nuevoPac = await pool.query(
+      `INSERT INTO pacientes (nombre, telefono, email) VALUES ($1,$2,$3) RETURNING id`,
+      [paciente_nombre, paciente_telefono, paciente_email]
     );
-
-    res.status(201).json({ success: true, cita: result.rows[0], mensaje: `Cita creada para ${paciente_nombre} el ${fecha} a las ${hora}` });
-  } catch (err) {
-    res.status(500).json({ error: 'Error interno' });
+    paciente_id = nuevoPac.rows[0].id;
   }
+}
+
+const result = await pool.query(
+  `INSERT INTO citas (paciente_nombre, paciente_telefono, paciente_email, tipo, doctor, fecha, hora, duracion_min, notas, canal, estado, paciente_id)
+   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'confirmada',$11) RETURNING *`,
+  [paciente_nombre, paciente_telefono, paciente_email, tipo, doctor, fecha, hora, duracion_min, notas, canal, paciente_id]
+);
+
+res.status(201).json({
+  success: true,
+  cita: result.rows[0],
+  mensaje: `Cita creada para ${paciente_nombre} el ${fecha} a las ${hora}`
 });
 
 
@@ -380,6 +405,229 @@ app.post('/cancelar', auth, async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// PACIENTES
+// ══════════════════════════════════════════════════════════════════════════════
+
+// GET /pacientes — listar o buscar
+app.get('/pacientes', authAny, async (req, res) => {
+  try {
+    const { nombre, telefono } = req.query;
+    let query = 'SELECT * FROM pacientes WHERE activo = true';
+    const params = [];
+    let i = 1;
+    if (nombre)   { query += ` AND unaccent(lower(nombre)) ILIKE unaccent(lower($${i++}))`; params.push(`%${nombre}%`); }
+    if (telefono) { query += ` AND telefono ILIKE $${i++}`; params.push(`%${telefono}%`); }
+    query += ' ORDER BY nombre ASC';
+    const result = await pool.query(query, params);
+    res.json({ pacientes: result.rows, total: result.rowCount });
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
+
+// GET /pacientes/:id
+app.get('/pacientes/:id', authAny, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID invalido' });
+    const result = await pool.query('SELECT * FROM pacientes WHERE id = $1', [id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Paciente no encontrado' });
+    res.json(result.rows[0]);
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
+
+// POST /pacientes — crear paciente
+app.post('/pacientes', authAny, async (req, res) => {
+  try {
+    const { nombre, telefono = null, email = null, direccion = null, fecha_nacimiento = null, notas_generales = null } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'nombre es requerido' });
+    const result = await pool.query(
+      `INSERT INTO pacientes (nombre, telefono, email, direccion, fecha_nacimiento, notas_generales)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [nombre.trim(), telefono, email, direccion, fecha_nacimiento, notas_generales]
+    );
+    res.status(201).json({ success: true, paciente: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
+
+// PATCH /pacientes/:id — actualizar paciente
+app.patch('/pacientes/:id', authAny, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID invalido' });
+    const campos = ['nombre','telefono','email','direccion','fecha_nacimiento','notas_generales'];
+    const updates = [], values = [];
+    let i = 1;
+    for (const campo of campos) {
+      if (req.body[campo] !== undefined) { updates.push(`${campo} = $${i++}`); values.push(req.body[campo]); }
+    }
+    if (!updates.length) return res.status(400).json({ error: 'No hay campos para actualizar' });
+    updates.push(`actualizado_en = NOW()`);
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE pacientes SET ${updates.join(', ')} WHERE id = $${i} RETURNING *`, values
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Paciente no encontrado' });
+    res.json({ success: true, paciente: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HISTORIAL CLINICO
+// ══════════════════════════════════════════════════════════════════════════════
+
+// GET /historial/:paciente_id
+app.get('/historial/:paciente_id', authAny, async (req, res) => {
+  try {
+    const id = parseInt(req.params.paciente_id);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID invalido' });
+    const result = await pool.query(
+      'SELECT * FROM historial_clinico WHERE paciente_id = $1 ORDER BY fecha DESC',
+      [id]
+    );
+    res.json({ historial: result.rows, total: result.rowCount });
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
+
+// POST /historial — agregar nota clinica
+app.post('/historial', authAny, async (req, res) => {
+  try {
+    const { paciente_id, cita_id = null, fecha = null, doctor = null, tratamiento = null, notas = null, archivos = [] } = req.body;
+    if (!paciente_id) return res.status(400).json({ error: 'paciente_id es requerido' });
+    const result = await pool.query(
+      `INSERT INTO historial_clinico (paciente_id, cita_id, fecha, doctor, tratamiento, notas, archivos)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [paciente_id, cita_id, fecha || new Date().toISOString().split('T')[0], doctor, tratamiento, notas, JSON.stringify(archivos)]
+    );
+    res.status(201).json({ success: true, registro: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
+
+// PATCH /historial/:id — editar nota
+app.patch('/historial/:id', authAny, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID invalido' });
+    const campos = ['fecha','doctor','tratamiento','notas','archivos'];
+    const updates = [], values = [];
+    let i = 1;
+    for (const campo of campos) {
+      if (req.body[campo] !== undefined) {
+        updates.push(`${campo} = $${i++}`);
+        values.push(campo === 'archivos' ? JSON.stringify(req.body[campo]) : req.body[campo]);
+      }
+    }
+    if (!updates.length) return res.status(400).json({ error: 'No hay campos para actualizar' });
+    updates.push(`actualizado_en = NOW()`);
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE historial_clinico SET ${updates.join(', ')} WHERE id = $${i} RETURNING *`, values
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Registro no encontrado' });
+    res.json({ success: true, registro: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PRESUPUESTOS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// GET /presupuestos/:paciente_id
+app.get('/presupuestos/:paciente_id', authAny, async (req, res) => {
+  try {
+    const id = parseInt(req.params.paciente_id);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID invalido' });
+    const result = await pool.query(
+      'SELECT * FROM presupuestos WHERE paciente_id = $1 ORDER BY creado_en DESC', [id]
+    );
+    res.json({ presupuestos: result.rows, total: result.rowCount });
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
+
+// POST /presupuestos — crear presupuesto
+app.post('/presupuestos', authAny, async (req, res) => {
+  try {
+    const { paciente_id, descripcion, tratamientos = [], monto_total_ars = 0, monto_total_usd = 0, moneda_principal = 'ARS', doctor = null, notas = null } = req.body;
+    if (!paciente_id || !descripcion) return res.status(400).json({ error: 'paciente_id y descripcion son requeridos' });
+    const result = await pool.query(
+      `INSERT INTO presupuestos (paciente_id, descripcion, tratamientos, monto_total_ars, monto_total_usd, moneda_principal, doctor, notas)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [paciente_id, descripcion, JSON.stringify(tratamientos), monto_total_ars, monto_total_usd, moneda_principal, doctor, notas]
+    );
+    res.status(201).json({ success: true, presupuesto: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
+
+// PATCH /presupuestos/:id — actualizar presupuesto
+app.patch('/presupuestos/:id', authAny, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID invalido' });
+    const campos = ['descripcion','tratamientos','monto_total_ars','monto_total_usd','moneda_principal','estado','doctor','notas'];
+    const updates = [], values = [];
+    let i = 1;
+    for (const campo of campos) {
+      if (req.body[campo] !== undefined) {
+        updates.push(`${campo} = $${i++}`);
+        values.push(campo === 'tratamientos' ? JSON.stringify(req.body[campo]) : req.body[campo]);
+      }
+    }
+    if (!updates.length) return res.status(400).json({ error: 'No hay campos para actualizar' });
+    updates.push(`actualizado_en = NOW()`);
+    values.push(id);
+    const result = await pool.query(
+      `UPDATE presupuestos SET ${updates.join(', ')} WHERE id = $${i} RETURNING *`, values
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Presupuesto no encontrado' });
+    res.json({ success: true, presupuesto: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PAGOS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// GET /pagos/:paciente_id
+app.get('/pagos/:paciente_id', authAny, async (req, res) => {
+  try {
+    const id = parseInt(req.params.paciente_id);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID invalido' });
+    const result = await pool.query(
+      'SELECT * FROM pagos WHERE paciente_id = $1 ORDER BY fecha DESC', [id]
+    );
+    res.json({ pagos: result.rows, total: result.rowCount });
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
+
+// POST /pagos — registrar pago
+app.post('/pagos', authAny, async (req, res) => {
+  try {
+    const { paciente_id, presupuesto_id = null, fecha = null, monto, moneda = 'ARS', metodo_pago, cuotas = 1, notas = null } = req.body;
+    if (!paciente_id || !monto || !metodo_pago) return res.status(400).json({ error: 'paciente_id, monto y metodo_pago son requeridos' });
+    const metodosValidos = ['efectivo','debito','credito','qr','transferencia'];
+    if (!metodosValidos.includes(metodo_pago)) return res.status(400).json({ error: `metodo_pago invalido. Valores validos: ${metodosValidos.join(', ')}` });
+    const result = await pool.query(
+      `INSERT INTO pagos (paciente_id, presupuesto_id, fecha, monto, moneda, metodo_pago, cuotas, notas)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [paciente_id, presupuesto_id, fecha || new Date().toISOString().split('T')[0], monto, moneda, metodo_pago, cuotas, notas]
+    );
+    res.status(201).json({ success: true, pago: result.rows[0] });
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
+
+// GET /saldos/:paciente_id — ver saldos pendientes
+app.get('/saldos/:paciente_id', authAny, async (req, res) => {
+  try {
+    const id = parseInt(req.params.paciente_id);
+    if (isNaN(id)) return res.status(400).json({ error: 'ID invalido' });
+    const result = await pool.query(
+      'SELECT * FROM vista_saldos WHERE paciente_id = $1', [id]
+    );
+    res.json({ saldos: result.rows, total: result.rowCount });
+  } catch (err) { res.status(500).json({ error: 'Error interno' }); }
+});
 
 // ─── START SERVER ───────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
