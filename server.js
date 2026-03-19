@@ -274,7 +274,10 @@ res.status(201).json({
   cita: result.rows[0],
   mensaje: `Cita creada para ${paciente_nombre} el ${fecha} a las ${hora}`
 });
-
+  } catch (err) {
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
 
 app.patch('/citas/:id', authAny, async (req, res) => {
   try {
