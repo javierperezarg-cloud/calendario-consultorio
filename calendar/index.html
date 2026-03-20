@@ -2053,14 +2053,9 @@ async function loadCitasPaciente() {
   try {
     let citas = [];
     if (API_URL && nombre) {
-      const data = await apiFetch('/buscar', {
-        method: 'POST',
-        body: JSON.stringify({ paciente_nombre: nombre })
-      });
-      // buscar devuelve solo confirmadas; pedimos todas incluyendo canceladas
-      // usando GET /citas?paciente=nombre
-      const data2 = await apiFetch(`/citas?paciente=${encodeURIComponent(nombre)}`);
-      citas = data2?.citas || data?.citas || [];
+      // GET /citas?paciente= trae todas las citas (confirmadas + canceladas) con búsqueda ILIKE
+      const data = await apiFetch(`/citas?paciente=${encodeURIComponent(nombre)}`);
+      citas = data?.citas || [];
     } else if (!API_URL) {
       // Demo: filtrar de los eventos cargados
       citas = eventos.filter(e => e.paciente_nombre === nombre);
