@@ -574,6 +574,86 @@
     /* ── HISTORIAL ENTRY EDIT ── */
     .hc-card.editing { border-color: var(--accent); }
 
+    /* ── BANNER SESIÓN POR VENCER ── */
+    .session-banner {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+      background: linear-gradient(90deg, #1a1500, #2a2000);
+      border-bottom: 1px solid rgba(255,209,102,0.4);
+      padding: 10px 20px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      transform: translateY(-100%);
+      transition: transform 0.35s cubic-bezier(0.34,1.2,0.64,1);
+    }
+    .session-banner.visible { transform: translateY(0); }
+    .session-banner-msg {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.82rem; color: var(--warn);
+    }
+    .session-banner-msg svg { flex-shrink: 0; }
+    .session-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .session-renew-btn {
+      background: var(--warn); color: #1a1000;
+      border: none; padding: 6px 16px; border-radius: 20px;
+      font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 0.78rem;
+      cursor: pointer; transition: opacity 0.15s;
+    }
+    .session-renew-btn:hover { opacity: 0.85; }
+    .session-dismiss-btn {
+      background: none; border: 1px solid rgba(255,209,102,0.3);
+      color: var(--warn); padding: 6px 12px; border-radius: 20px;
+      font-family: 'Outfit', sans-serif; font-size: 0.78rem;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .session-dismiss-btn:hover { background: rgba(255,209,102,0.1); }
+
+    /* ── MODAL RELOGIN ── */
+    .relogin-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 500; backdrop-filter: blur(6px);
+      animation: fIn 0.2s ease;
+    }
+    .relogin-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 36px 32px; width: 340px; max-width: 92vw;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+      animation: sUp 0.25s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .relogin-icon { font-size: 2rem; margin-bottom: 10px; }
+    .relogin-box h3 {
+      font-family: 'Playfair Display', serif; font-size: 1.2rem;
+      color: var(--warn); margin-bottom: 6px;
+    }
+    .relogin-box p { font-size: 0.83rem; color: var(--text2); margin-bottom: 22px; line-height: 1.5; }
+    .relogin-field { margin-bottom: 14px; }
+    .relogin-field label {
+      display: block; font-size: 0.7rem; color: var(--text2); font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 5px;
+    }
+    .relogin-field input {
+      width: 100%; padding: 10px 12px; background: var(--surface2);
+      border: 1.5px solid var(--border); border-radius: 8px; color: var(--text);
+      font-family: 'Outfit', sans-serif; font-size: 0.9rem; outline: none;
+      transition: border-color 0.15s;
+    }
+    .relogin-field input:focus { border-color: var(--warn); }
+    .relogin-btn {
+      width: 100%; padding: 11px; background: var(--warn); color: #1a1000;
+      border: none; border-radius: 8px; font-family: 'Outfit', sans-serif;
+      font-weight: 700; font-size: 0.9rem; cursor: pointer;
+      transition: opacity 0.2s; margin-top: 4px;
+    }
+    .relogin-btn:hover { opacity: 0.85; }
+    .relogin-btn:disabled { opacity: 0.5; cursor: wait; }
+    .relogin-error { color: var(--danger); font-size: 0.8rem; margin-top: 10px; text-align: center; min-height: 18px; }
+    .relogin-logout {
+      display: block; text-align: center; margin-top: 14px;
+      font-size: 0.78rem; color: var(--text2); cursor: pointer;
+      text-decoration: underline; background: none; border: none;
+      font-family: 'Outfit', sans-serif;
+    }
+    .relogin-logout:hover { color: var(--danger); }
+
     /* ══════════════════════════════════════════════════════════════
        RESPONSIVE — MÓVIL / TABLET
     ══════════════════════════════════════════════════════════════ */
@@ -1110,6 +1190,39 @@
   </div>
 </div>
 
+<!-- ── BANNER SESIÓN POR VENCER ── -->
+<div class="session-banner" id="sessionBanner">
+  <div class="session-banner-msg">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    <span id="sessionBannerMsg">Tu sesión expira en 30 minutos</span>
+  </div>
+  <div class="session-banner-actions">
+    <button class="session-renew-btn" onclick="openRelogin()">Renovar sesión</button>
+    <button class="session-dismiss-btn" onclick="dismissBanner()">Ahora no</button>
+  </div>
+</div>
+
+<!-- ── MODAL RELOGIN ── -->
+<div class="relogin-overlay" id="reloginOverlay" style="display:none">
+  <div class="relogin-box">
+    <div class="relogin-icon">🔒</div>
+    <h3>Sesión expirada</h3>
+    <p id="reloginMsg">Tu sesión ha expirado por seguridad. Ingresá tu contraseña para continuar sin perder lo que estabas haciendo.</p>
+    <div class="relogin-field">
+      <label>Usuario</label>
+      <input type="text" id="reloginUsuario" readonly style="opacity:0.6">
+    </div>
+    <div class="relogin-field">
+      <label>Contraseña</label>
+      <input type="password" id="reloginPassword" placeholder="••••••••"
+        onkeydown="if(event.key==='Enter') doRelogin()">
+    </div>
+    <button class="relogin-btn" id="reloginBtn" onclick="doRelogin()">Continuar</button>
+    <div class="relogin-error" id="reloginError"></div>
+    <button class="relogin-logout" onclick="doLogout()">Cerrar sesión completamente</button>
+  </div>
+</div>
+
 <!-- LOGIN OVERLAY -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-box">
@@ -1179,7 +1292,13 @@ async function apiFetch(path, opts = {}) {
   if (res.status === 401) {
     sessionStorage.removeItem('dc_token');
     JWT_TOKEN = '';
-    showLogin();
+    stopSessionWatcher();
+    hideBanner();
+    if (sessionStorage.getItem('dc_usuario')) {
+      openRelogin(true);
+    } else {
+      showLogin();
+    }
     return null;
   }
   if (!res.ok) {
@@ -1943,15 +2062,18 @@ function closeDayModal() {
 function showLogin() {
   document.getElementById('loginOverlay').style.display = 'flex';
   document.getElementById('logoutBtn').style.display = 'none';
+  document.getElementById('btnSearch').style.display = 'none';
   document.getElementById('loginUsuario').value = '';
   document.getElementById('loginPassword').value = '';
   document.getElementById('loginError').textContent = '';
+  stopSessionWatcher();
 }
 
 function hideLogin() {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('logoutBtn').style.display = 'inline-block';
   document.getElementById('btnSearch').style.display = 'flex';
+  startSessionWatcher();
 }
 
 async function doLogin() {
@@ -1974,6 +2096,7 @@ async function doLogin() {
     if (!res.ok) { errorEl.textContent = data.error || 'Credenciales incorrectas'; return; }
     JWT_TOKEN = data.token;
     sessionStorage.setItem('dc_token', JWT_TOKEN);
+    sessionStorage.setItem('dc_usuario', data.usuario.usuario);
     hideLogin();
     render();
     loadEvents(...getCurrentRange());
@@ -1986,8 +2109,12 @@ async function doLogin() {
 }
 
 function doLogout() {
+  stopSessionWatcher();
   sessionStorage.removeItem('dc_token');
+  sessionStorage.removeItem('dc_usuario');
   JWT_TOKEN = '';
+  hideBanner();
+  document.getElementById('reloginOverlay').style.display = 'none';
   showLogin();
 }
 
@@ -1996,6 +2123,139 @@ function getCurrentRange() {
   const desde = `${y}-${String(m+1).padStart(2,'0')}-01`;
   const hasta  = `${y}-${String(m+1).padStart(2,'0')}-${new Date(y,m+1,0).getDate()}`;
   return [desde, hasta];
+}
+
+// ── GESTIÓN DE SESIÓN JWT ────────────────────────────────────────────────────
+let sessionWatcherInterval = null;
+let bannerDismissed = false;
+
+function parseJwtExpiry(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp ? payload.exp * 1000 : null; // convertir a ms
+  } catch { return null; }
+}
+
+function getMinutesLeft(expiryMs) {
+  return Math.floor((expiryMs - Date.now()) / 60000);
+}
+
+function startSessionWatcher() {
+  stopSessionWatcher();
+  bannerDismissed = false;
+  sessionWatcherInterval = setInterval(checkSessionExpiry, 30000); // chequear cada 30s
+  checkSessionExpiry(); // chequear inmediatamente al iniciar
+}
+
+function stopSessionWatcher() {
+  if (sessionWatcherInterval) {
+    clearInterval(sessionWatcherInterval);
+    sessionWatcherInterval = null;
+  }
+}
+
+function checkSessionExpiry() {
+  if (!JWT_TOKEN) return;
+
+  const expiry = parseJwtExpiry(JWT_TOKEN);
+  if (!expiry) return;
+
+  const minutesLeft = getMinutesLeft(expiry);
+
+  if (minutesLeft <= 0) {
+    // Sesión expirada — mostrar relogin
+    stopSessionWatcher();
+    hideBanner();
+    openRelogin(true);
+    return;
+  }
+
+  if (minutesLeft <= 30 && !bannerDismissed) {
+    // Quedan 30 min o menos — mostrar banner
+    showBanner(minutesLeft);
+  } else if (minutesLeft > 30) {
+    hideBanner();
+    bannerDismissed = false;
+  }
+}
+
+function showBanner(minutesLeft) {
+  const banner = document.getElementById('sessionBanner');
+  const msg    = document.getElementById('sessionBannerMsg');
+  if (minutesLeft <= 1) {
+    msg.textContent = 'Tu sesión expira en menos de 1 minuto';
+  } else {
+    msg.textContent = `Tu sesión expira en ${minutesLeft} minuto${minutesLeft !== 1 ? 's' : ''}`;
+  }
+  banner.classList.add('visible');
+  // Empujar el header hacia abajo para que no tape contenido
+  document.querySelector('header').style.top = banner.offsetHeight + 'px';
+}
+
+function hideBanner() {
+  const banner = document.getElementById('sessionBanner');
+  banner.classList.remove('visible');
+  document.querySelector('header').style.top = '0';
+}
+
+function dismissBanner() {
+  bannerDismissed = true;
+  hideBanner();
+}
+
+function openRelogin(expired = false) {
+  const overlay = document.getElementById('reloginOverlay');
+  const msg     = document.getElementById('reloginMsg');
+  const titulo  = overlay.querySelector('h3');
+  const usuario = sessionStorage.getItem('dc_usuario') || '';
+
+  if (expired) {
+    titulo.textContent = 'Sesión expirada';
+    msg.textContent = 'Tu sesión expiró por seguridad. Ingresá tu contraseña para continuar sin perder nada.';
+  } else {
+    titulo.textContent = 'Renovar sesión';
+    msg.textContent = 'Ingresá tu contraseña para renovar la sesión por 8 horas más.';
+  }
+
+  document.getElementById('reloginUsuario').value  = usuario;
+  document.getElementById('reloginPassword').value = '';
+  document.getElementById('reloginError').textContent = '';
+  overlay.style.display = 'flex';
+  hideBanner();
+  setTimeout(() => document.getElementById('reloginPassword').focus(), 80);
+}
+
+async function doRelogin() {
+  const usuario  = document.getElementById('reloginUsuario').value.trim();
+  const password = document.getElementById('reloginPassword').value;
+  const btn      = document.getElementById('reloginBtn');
+  const errorEl  = document.getElementById('reloginError');
+
+  if (!password) { errorEl.textContent = 'Ingresá tu contraseña'; return; }
+
+  btn.disabled = true; btn.textContent = 'Verificando...'; errorEl.textContent = '';
+
+  try {
+    const res = await fetch(API_URL + '/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario, password })
+    });
+    const data = await res.json();
+    if (!res.ok) { errorEl.textContent = data.error || 'Contraseña incorrecta'; return; }
+
+    JWT_TOKEN = data.token;
+    sessionStorage.setItem('dc_token', JWT_TOKEN);
+    sessionStorage.setItem('dc_usuario', data.usuario.usuario);
+    document.getElementById('reloginOverlay').style.display = 'none';
+    bannerDismissed = false;
+    startSessionWatcher();
+    toast('✅ Sesión renovada por 8 horas');
+  } catch (e) {
+    errorEl.textContent = 'Error de conexión';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Continuar';
+  }
 }
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
