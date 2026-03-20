@@ -1933,37 +1933,57 @@ async function runSearch(q) {
   const resultsEl = document.getElementById('searchResults');
   resultsEl.innerHTML = `<div class="search-loading"><div class="hc-spinner"></div> Buscando...</div>`;
 
-  // Determinar campo de búsqueda según formato
-  const isEmail = q.includes('@');
   const isPhone = /^[\d\s\+\-\(\)]{4,}$/.test(q);
 
   try {
     let resultados = [];
 
     if (API_URL) {
-      // Buscar siempre por nombre; si parece teléfono o email, también por esos campos
-      const promises = [apiFetch(`/pacientes?nombre=${encodeURIComponent(q)}`)];
+      // Buscar en paralelo: tabla pacientes + tabla citas
+      const promises = [
+        apiFetch(`/pacientes?nombre=${encodeURIComponent(q)}`),
+        apiFetch(`/citas?paciente=${encodeURIComponent(q)}`),
+      ];
       if (isPhone) promises.push(apiFetch(`/pacientes?telefono=${encodeURIComponent(q)}`));
-      if (isEmail) promises.push(apiFetch(`/pacientes?nombre=${encodeURIComponent(q)}`)); // fallback nombre
 
-      const results = await Promise.all(promises);
+      const [resPacientes, resCitas, resTel] = await Promise.all(promises);
 
-      // Combinar y deduplicar por ID
+      // 1. Agregar pacientes con ficha (tienen ID en tabla pacientes)
       const seen = new Set();
-      results.forEach(r => {
-        if (r && r.pacientes) {
-          r.pacientes.forEach(p => {
-            if (!seen.has(p.id)) { seen.add(p.id); resultados.push(p); }
+      const fichas = [
+        ...(resPacientes?.pacientes || []),
+        ...(resTel?.pacientes || []),
+      ];
+      fichas.forEach(p => {
+        if (!seen.has(p.id)) { seen.add(p.id); resultados.push(p); }
+      });
+
+      // 2. Agregar pacientes que solo están en citas (sin ficha)
+      // Deduplicar por nombre normalizado
+      const nombresConFicha = new Set(resultados.map(p => p.nombre.toLowerCase().trim()));
+      const citasNombres = resCitas?.citas || [];
+      const nombresSinFicha = new Set();
+      citasNombres.forEach(c => {
+        const nombreNorm = c.paciente_nombre.toLowerCase().trim();
+        if (!nombresConFicha.has(nombreNorm) && !nombresSinFicha.has(nombreNorm)) {
+          nombresSinFicha.add(nombreNorm);
+          resultados.push({
+            id: null,
+            nombre: c.paciente_nombre,
+            telefono: c.paciente_telefono || null,
+            email: c.paciente_email || null,
+            _sinFicha: true,
           });
         }
       });
+
     } else {
       // Modo demo — buscar en eventos cargados
       const nombres = [...new Set(eventos.map(e => e.paciente_nombre))];
       const ql = q.toLowerCase();
       resultados = nombres
         .filter(n => n.toLowerCase().includes(ql))
-        .map((n, i) => ({
+        .map(n => ({
           id: null, nombre: n,
           telefono: eventos.find(e => e.paciente_nombre === n)?.paciente_telefono || null,
           email: eventos.find(e => e.paciente_nombre === n)?.paciente_email || null,
@@ -1990,12 +2010,14 @@ function renderSearchResults(lista, q) {
   el.innerHTML = lista.map(p => {
     const inicial = (p.nombre || '?').charAt(0).toUpperCase();
     const meta = [p.telefono, p.email].filter(Boolean).join(' · ') || 'Sin contacto registrado';
+    const sinFichaBadge = p._sinFicha ? `<span class="sri-badge" style="color:var(--warn);background:rgba(255,209,102,0.1)">Sin ficha</span>` : '';
     return `<div class="search-result-item" onclick="openPacienteDesdeSearch(${JSON.stringify(p).replace(/"/g, '&quot;')})">
-      <div class="sri-avatar">${inicial}</div>
+      <div class="sri-avatar" style="${p._sinFicha ? 'opacity:0.6' : ''}">${inicial}</div>
       <div class="sri-info">
         <div class="sri-name">${highlightMatch(p.nombre || '—', q)}</div>
         <div class="sri-meta">${meta}</div>
       </div>
+      ${sinFichaBadge}
       <span class="sri-arrow">›</span>
     </div>`;
   }).join('');
