@@ -189,7 +189,7 @@ app.get('/citas', authAny, async (req, res) => {
     if (desde)    { query += ` AND fecha::date >= $${i++}`;        params.push(normalizarFecha(desde)); }
     if (hasta)    { query += ` AND fecha::date <= $${i++}`;        params.push(normalizarFecha(hasta)); }
     if (estado)   { query += ` AND estado = $${i++}`;              params.push(estado); }
-    if (paciente) { query += ` AND paciente_nombre ILIKE $${i++}`; params.push(`%${paciente}%`); }
+    if (paciente) { query += ` AND unaccent(lower(paciente_nombre)) ILIKE unaccent(lower($${i++}))`; params.push(`%${paciente}%`); }
 
     query += ' ORDER BY fecha ASC, hora ASC';
     const result = await pool.query(query, params);
