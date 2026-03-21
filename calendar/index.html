@@ -7,6 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DentaCal Pro</title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
     :root {
       --bg:       #0f1117;
@@ -574,6 +575,145 @@
     /* ── HISTORIAL ENTRY EDIT ── */
     .hc-card.editing { border-color: var(--accent); }
 
+    /* ══════════════════════════════════════════════════════════════
+       REPORTES
+    ══════════════════════════════════════════════════════════════ */
+    .rep-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200; backdrop-filter: blur(5px);
+      animation: fIn 0.2s ease;
+    }
+    .rep-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 18px; width: 820px; max-width: 97vw;
+      max-height: 90vh; display: flex; flex-direction: column;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.5);
+      animation: sUp 0.25s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .rep-header {
+      padding: 20px 24px 0; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .rep-header-top {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+    }
+    .rep-header-top h2 {
+      font-family: 'Playfair Display', serif; font-size: 1.3rem; color: var(--accent);
+    }
+    .rep-header-controls {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;
+    }
+    .rep-period-select {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      padding: 7px 12px; border-radius: 8px; font-family: 'Outfit', sans-serif;
+      font-size: 0.82rem; outline: none; cursor: pointer;
+    }
+    .rep-period-select:focus { border-color: var(--accent); }
+    .rep-date-input {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      padding: 7px 10px; border-radius: 8px; font-family: 'Outfit', sans-serif;
+      font-size: 0.82rem; outline: none;
+    }
+    .rep-date-input:focus { border-color: var(--accent); }
+    .rep-run-btn {
+      background: var(--accent); color: var(--bg); border: none;
+      padding: 7px 18px; border-radius: 8px; font-family: 'Outfit', sans-serif;
+      font-weight: 600; font-size: 0.82rem; cursor: pointer; transition: all 0.2s;
+    }
+    .rep-run-btn:hover { background: var(--accent2); }
+    .rep-run-btn:disabled { opacity: 0.5; cursor: wait; }
+    .rep-export-btn {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text2);
+      padding: 7px 16px; border-radius: 8px; font-family: 'Outfit', sans-serif;
+      font-size: 0.82rem; cursor: pointer; transition: all 0.15s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .rep-export-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .rep-tabs { display: flex; gap: 0; }
+    .rep-tab {
+      background: none; border: none; border-bottom: 2px solid transparent;
+      color: var(--text2); padding: 10px 18px; font-family: 'Outfit', sans-serif;
+      font-size: 0.82rem; font-weight: 500; cursor: pointer; transition: all 0.15s;
+    }
+    .rep-tab:hover { color: var(--text); }
+    .rep-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .rep-body { flex: 1; overflow-y: auto; padding: 24px; }
+    .rep-body::-webkit-scrollbar { width: 4px; }
+    .rep-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .rep-tab-content { display: none; }
+    .rep-tab-content.active { display: block; }
+
+    /* Stat cards */
+    .rep-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 12px; margin-bottom: 24px; }
+    .rep-stat {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px; text-align: center;
+    }
+    .rep-stat-val { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+    .rep-stat-lbl { font-size: 0.7rem; color: var(--text2); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.07em; }
+    .rep-stat.warn .rep-stat-val { color: var(--warn); }
+    .rep-stat.danger .rep-stat-val { color: var(--danger); }
+    .rep-stat.blue .rep-stat-val { color: #64a0ff; }
+
+    /* Chart container */
+    .rep-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .rep-chart-box {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px;
+    }
+    .rep-chart-box h4 {
+      font-size: 0.72rem; font-weight: 700; color: var(--text2);
+      text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 14px;
+    }
+    .rep-chart-box canvas { max-height: 200px; }
+
+    /* Table */
+    .rep-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .rep-table th {
+      text-align: left; padding: 8px 12px; font-size: 0.68rem; font-weight: 700;
+      color: var(--text2); text-transform: uppercase; letter-spacing: 0.08em;
+      border-bottom: 1px solid var(--border);
+    }
+    .rep-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+    .rep-table tr:last-child td { border-bottom: none; }
+    .rep-table tr:hover td { background: var(--surface2); }
+    .rep-section-title {
+      font-size: 0.65rem; font-weight: 700; color: var(--text2);
+      text-transform: uppercase; letter-spacing: 0.12em;
+      margin: 20px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border);
+    }
+    .rep-empty { text-align: center; padding: 40px; color: var(--text2); font-size: 0.85rem; }
+
+    /* Tipo cambio VES */
+    .ves-rate-row {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(100,160,255,0.08); border: 1px solid rgba(100,160,255,0.2);
+      border-radius: 8px; padding: 8px 12px; margin-bottom: 16px; font-size: 0.8rem; color: var(--text2);
+    }
+    .ves-rate-input {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      padding: 4px 8px; border-radius: 6px; font-family: 'Outfit', sans-serif;
+      font-size: 0.82rem; width: 90px; outline: none;
+    }
+    .ves-rate-input:focus { border-color: #64a0ff; }
+
+    @media (max-width: 768px) {
+      .rep-box { border-radius: 20px 20px 0 0; max-height: 95vh; }
+      .rep-charts { grid-template-columns: 1fr; }
+      .rep-overlay { align-items: flex-end; }
+      .rep-stats { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media print {
+      body > *:not(.rep-overlay) { display: none !important; }
+      .rep-overlay { position: static; background: white; }
+      .rep-box { box-shadow: none; border: none; max-height: none; width: 100%; border-radius: 0; }
+      .rep-header-controls, .rep-export-btn, .rep-close-btn, .rep-run-btn { display: none !important; }
+      .rep-tab-content { display: block !important; }
+      .rep-tabs { display: none; }
+      .rep-body { overflow: visible; }
+    }
+
     /* ── BANNER SESIÓN POR VENCER ── */
     .session-banner {
       position: fixed; top: 0; left: 0; right: 0; z-index: 60;
@@ -792,6 +932,10 @@
     <button class="btn-search" onclick="openSearch()" title="Buscar paciente" id="btnSearch" style="display:none">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <span>Buscar paciente</span>
+    </button>
+    <button class="btn-search" onclick="openReportes()" id="btnReportes" style="display:none" title="Reportes">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span>Reportes</span>
     </button>
     <button class="btn-new" onclick="openNew()">+ Nueva Cita</button>
   </div>
@@ -1088,6 +1232,7 @@
             <select id="pfMoneda">
               <option value="ARS">ARS - Pesos</option>
               <option value="USD">USD - Dólares</option>
+              <option value="VES">VES - Bolívares</option>
             </select>
           </div>
           <div class="hc-form-field">
@@ -1140,10 +1285,15 @@
           </div>
           <div class="hc-form-field">
             <label>Moneda</label>
-            <select id="pgMoneda">
+            <select id="pgMoneda" onchange="toggleTipoCambio()">
               <option value="ARS">ARS - Pesos</option>
               <option value="USD">USD - Dólares</option>
+              <option value="VES">VES - Bolívares</option>
             </select>
+          </div>
+          <div class="hc-form-field" id="tipoCambioField" style="display:none">
+            <label>Tipo de cambio USD/VES</label>
+            <input type="number" id="pgTipoCambio" placeholder="Ej: 45.50" step="0.01">
           </div>
           <div class="hc-form-field">
             <label>Cuotas</label>
@@ -1161,6 +1311,59 @@
       </div>
       <div class="hc-loading" id="pagosLoading"><div class="hc-spinner"></div> Cargando...</div>
       <div id="pagosContent"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL REPORTES
+══════════════════════════════════════════════════════════════ -->
+<div class="rep-overlay" id="repOverlay" style="display:none" onclick="if(event.target===this)closeReportes()">
+  <div class="rep-box" onclick="event.stopPropagation()">
+    <div class="rep-header">
+      <div class="rep-header-top">
+        <h2>📊 Reportes</h2>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="rep-export-btn" onclick="exportarPDF()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Exportar PDF
+          </button>
+          <button class="rep-close-btn hc-close" onclick="closeReportes()">✕</button>
+        </div>
+      </div>
+      <div class="rep-header-controls">
+        <select class="rep-period-select" id="repPeriodo" onchange="onPeriodoChange()">
+          <option value="mes_actual">Mes actual</option>
+          <option value="mes_anterior">Mes anterior</option>
+          <option value="trimestre">Últimos 3 meses</option>
+          <option value="personalizado">Personalizado</option>
+        </select>
+        <div id="repFechasCustom" style="display:none;gap:8px;align-items:center;display:none">
+          <input type="date" class="rep-date-input" id="repDesde">
+          <span style="color:var(--text2);font-size:0.8rem">→</span>
+          <input type="date" class="rep-date-input" id="repHasta">
+        </div>
+        <button class="rep-run-btn" id="repRunBtn" onclick="generarReportes()">Generar</button>
+      </div>
+      <div class="rep-tabs">
+        <button class="rep-tab active" onclick="switchRepTab('citas')" id="reptab-citas">📅 Citas</button>
+        <button class="rep-tab" onclick="switchRepTab('pacientes')" id="reptab-pacientes">👤 Pacientes</button>
+        <button class="rep-tab" onclick="switchRepTab('financiero')" id="reptab-financiero">💰 Financiero</button>
+      </div>
+    </div>
+    <div class="rep-body" id="repBody">
+      <!-- TAB CITAS -->
+      <div class="rep-tab-content active" id="repcontent-citas">
+        <div class="rep-empty">Elegí un período y presioná <strong>Generar</strong></div>
+      </div>
+      <!-- TAB PACIENTES -->
+      <div class="rep-tab-content" id="repcontent-pacientes">
+        <div class="rep-empty">Elegí un período y presioná <strong>Generar</strong></div>
+      </div>
+      <!-- TAB FINANCIERO -->
+      <div class="rep-tab-content" id="repcontent-financiero">
+        <div class="rep-empty">Elegí un período y presioná <strong>Generar</strong></div>
+      </div>
     </div>
   </div>
 </div>
@@ -1348,7 +1551,6 @@ function loadDemo() {
 function todayStr() { return new Date().toISOString().split('T')[0]; }
 function addDays(s, n) { const d = new Date(s); d.setDate(d.getDate()+n); return d.toISOString().split('T')[0]; }
 function fmtDate(s) { const fecha=s.toString().split('T')[0]; const [y,m,d]=fecha.split('-'); return `${d} de ${MESES[parseInt(m)-1]} ${y}`; }
-function fmtMoney(n, cur='ARS') { if(!n && n!==0) return '—'; return new Intl.NumberFormat('es-AR',{style:'currency',currency:cur,minimumFractionDigits:0}).format(n); }
 function evForDate(d) { return eventos.filter(e => e.fecha.toString().split('T')[0] === d).sort((a,b)=>a.hora.localeCompare(b.hora)); }
 function weekStart(d) { const s=new Date(d); s.setDate(s.getDate()-s.getDay()); return s; }
 
@@ -1635,12 +1837,29 @@ async function openHistoria(pacienteNombre, pacienteTelefono = null) {
 }
 
 function closeHistoria() {
+  // Si hay algún formulario inline abierto con datos, confirmar
+  const formsAbiertos = [
+    { id: 'historialForm',    fields: ['hfTratamiento', 'hfNotas'] },
+    { id: 'presupuestoForm',  fields: ['pfDesc', 'pfARS', 'pfUSD', 'pfNotas'] },
+    { id: 'pagoForm',         fields: ['pgMonto', 'pgNotas'] },
+  ];
+  const formSucio = formsAbiertos.find(f => {
+    const el = document.getElementById(f.id);
+    return el && el.style.display !== 'none' && formHCHasData(f.fields);
+  });
+  if (formSucio) {
+    showConfirmClose(() => _cerrarHistoria());
+    return;
+  }
+  _cerrarHistoria();
+}
+
+function _cerrarHistoria() {
   document.getElementById('hcBackdrop').classList.remove('open');
   document.getElementById('hcPanel').classList.remove('open');
-  // Esconder formularios inline
-  document.getElementById('historialForm').style.display = 'none';
+  document.getElementById('historialForm').style.display   = 'none';
   document.getElementById('presupuestoForm').style.display = 'none';
-  document.getElementById('pagoForm').style.display = 'none';
+  document.getElementById('pagoForm').style.display        = 'none';
 }
 
 function switchTab(tab, loadData = true) {
@@ -1749,12 +1968,20 @@ function renderHistorialCard(h) {
 function toggleHistorialForm() {
   const f = document.getElementById('historialForm');
   const visible = f.style.display !== 'none';
+  if (visible && formHCHasData(['hfTratamiento', 'hfNotas'])) {
+    showConfirmClose(() => {
+      f.style.display = 'none';
+      hcEditingHistorialId = null;
+    });
+    return;
+  }
   f.style.display = visible ? 'none' : 'block';
   if (!visible) {
     document.getElementById('hfFecha').value = todayStr();
     document.getElementById('hfTratamiento').value = '';
     document.getElementById('hfNotas').value = '';
     hcEditingHistorialId = null;
+    document.getElementById('historialForm').querySelector('h4').textContent = 'Nueva nota clínica';
   }
 }
 
@@ -1859,8 +2086,13 @@ function renderPresupuestoCard(p) {
 
 function togglePresupuestoForm() {
   const f = document.getElementById('presupuestoForm');
-  f.style.display = f.style.display !== 'none' ? 'none' : 'block';
-  if (f.style.display !== 'none') {
+  const visible = f.style.display !== 'none';
+  if (visible && formHCHasData(['pfDesc', 'pfARS', 'pfUSD', 'pfNotas'])) {
+    showConfirmClose(() => { f.style.display = 'none'; });
+    return;
+  }
+  f.style.display = visible ? 'none' : 'block';
+  if (!visible) {
     document.getElementById('pfDesc').value  = '';
     document.getElementById('pfARS').value   = '';
     document.getElementById('pfUSD').value   = '';
@@ -1958,8 +2190,13 @@ function renderPagoCard(p) {
 
 function togglePagoForm() {
   const f = document.getElementById('pagoForm');
-  f.style.display = f.style.display !== 'none' ? 'none' : 'block';
-  if (f.style.display !== 'none') {
+  const visible = f.style.display !== 'none';
+  if (visible && formHCHasData(['pgMonto', 'pgNotas'])) {
+    showConfirmClose(() => { f.style.display = 'none'; });
+    return;
+  }
+  f.style.display = visible ? 'none' : 'block';
+  if (!visible) {
     document.getElementById('pgFecha').value  = todayStr();
     document.getElementById('pgMonto').value  = '';
     document.getElementById('pgCuotas').value = '1';
@@ -2012,8 +2249,92 @@ async function saveConfig(){
 }
 
 // ── MODALS ──────────────────────────────────────────────────────────────────
-function closeModal(id){ document.getElementById(id).style.display='none'; }
-function closeOverlay(e,id){ if(e.target===document.getElementById(id)) closeModal(id); }
+
+// Verifica si el formulario de cita tiene datos cargados
+function formCitaHasData() {
+  return !!(
+    document.getElementById('fNombre').value.trim() ||
+    document.getElementById('fTel').value.trim() ||
+    document.getElementById('fEmail').value.trim() ||
+    document.getElementById('fNotas').value.trim()
+  );
+}
+
+// Verifica si un formulario inline del panel HC tiene datos
+function formHCHasData(fields) {
+  return fields.some(id => {
+    const el = document.getElementById(id);
+    return el && el.value.trim() !== '' && el.value !== el.defaultValue;
+  });
+}
+
+function closeModal(id) {
+  // Confirmación solo para el formulario de cita con datos
+  if (id === 'formModal' && formCitaHasData()) {
+    showConfirmClose(() => {
+      document.getElementById(id).style.display = 'none';
+    });
+    return;
+  }
+  document.getElementById(id).style.display = 'none';
+}
+
+function closeOverlay(e, id) {
+  if (e.target !== document.getElementById(id)) return;
+  closeModal(id);
+}
+
+// Modal de confirmación de cierre
+function showConfirmClose(onConfirm) {
+  // Reusar si ya existe
+  let existing = document.getElementById('confirmCloseModal');
+  if (existing) existing.remove();
+
+  const el = document.createElement('div');
+  el.id = 'confirmCloseModal';
+  el.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.6);
+    display:flex;align-items:center;justify-content:center;
+    z-index:400;backdrop-filter:blur(4px);animation:fIn 0.15s ease;
+  `;
+  el.innerHTML = `
+    <div style="
+      background:var(--surface);border:1px solid var(--border);
+      border-radius:14px;padding:28px 26px;width:320px;max-width:92vw;
+      box-shadow:0 20px 60px rgba(0,0,0,0.5);
+      animation:sUp 0.2s cubic-bezier(0.34,1.56,0.64,1);
+    ">
+      <div style="font-size:1.8rem;margin-bottom:10px">⚠️</div>
+      <div style="font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--text);margin-bottom:8px">¿Salir sin guardar?</div>
+      <div style="font-size:0.83rem;color:var(--text2);margin-bottom:22px;line-height:1.5">
+        Hay cambios sin guardar. Si salís ahora se van a perder.
+      </div>
+      <div style="display:flex;gap:10px">
+        <button onclick="document.getElementById('confirmCloseModal').remove()" style="
+          flex:1;padding:10px;background:none;border:1px solid var(--border);
+          color:var(--text2);border-radius:8px;font-family:'Outfit',sans-serif;
+          font-size:0.85rem;cursor:pointer;transition:all 0.15s;
+        " onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+           onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text2)'">
+          Seguir editando
+        </button>
+        <button id="confirmCloseBtn" style="
+          flex:1;padding:10px;background:var(--danger);border:none;
+          color:#fff;border-radius:8px;font-family:'Outfit',sans-serif;
+          font-weight:600;font-size:0.85rem;cursor:pointer;transition:opacity 0.15s;
+        " onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+          Salir igual
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+  // Cerrar al click fuera
+  el.addEventListener('click', e => { if (e.target === el) el.remove(); });
+  document.getElementById('confirmCloseBtn').addEventListener('click', () => {
+    el.remove();
+    onConfirm();
+  });
+}
 
 // ── TOAST ───────────────────────────────────────────────────────────────────
 function toast(msg,err=false){
@@ -2063,6 +2384,7 @@ function showLogin() {
   document.getElementById('loginOverlay').style.display = 'flex';
   document.getElementById('logoutBtn').style.display = 'none';
   document.getElementById('btnSearch').style.display = 'none';
+  document.getElementById('btnReportes').style.display = 'none';
   document.getElementById('loginUsuario').value = '';
   document.getElementById('loginPassword').value = '';
   document.getElementById('loginError').textContent = '';
@@ -2073,6 +2395,7 @@ function hideLogin() {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('logoutBtn').style.display = 'inline-block';
   document.getElementById('btnSearch').style.display = 'flex';
+  document.getElementById('btnReportes').style.display = 'flex';
   startSessionWatcher();
 }
 
@@ -2579,7 +2902,403 @@ function renderCitaCard(c, esPasada) {
   </div>`;
 }
 
-// ── SIDEBAR MÓVIL ────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// MONEDAS — VES / tipo de cambio
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ⚠️ TIPO DE CAMBIO MANUAL — reemplazar aquí cuando se conecte API externa
+// TODO: conectar a API BCV o similar en el futuro
+let tipoCambioUSDVES = parseFloat(localStorage.getItem('dc_tc_ves')) || 1;
+
+function toggleTipoCambio() {
+  const moneda = document.getElementById('pgMoneda').value;
+  const field  = document.getElementById('tipoCambioField');
+  field.style.display = moneda === 'VES' ? 'flex' : 'none';
+  if (moneda === 'VES') {
+    document.getElementById('pgTipoCambio').value = tipoCambioUSDVES || '';
+  }
+}
+
+function fmtMoney(n, cur = 'ARS') {
+  if (!n && n !== 0) return '—';
+  const locales = { ARS: 'es-AR', USD: 'en-US', VES: 'es-VE' };
+  const locale  = locales[cur] || 'es-AR';
+  try {
+    return new Intl.NumberFormat(locale, { style: 'currency', currency: cur, minimumFractionDigits: 0 }).format(n);
+  } catch {
+    return `${cur} ${Number(n).toLocaleString()}`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// REPORTES
+// ══════════════════════════════════════════════════════════════════════════════
+
+let repCharts = {}; // guardar instancias de Chart.js para destruirlas al regenerar
+let repCurrentTab = 'citas';
+let repDatos = null; // datos cargados del último reporte
+
+function openReportes() {
+  document.getElementById('repOverlay').style.display = 'flex';
+  onPeriodoChange();
+}
+
+function closeReportes() {
+  document.getElementById('repOverlay').style.display = 'none';
+  // Destruir charts para liberar memoria
+  Object.values(repCharts).forEach(c => c.destroy());
+  repCharts = {};
+}
+
+function switchRepTab(tab) {
+  repCurrentTab = tab;
+  document.querySelectorAll('.rep-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('reptab-' + tab).classList.add('active');
+  document.querySelectorAll('.rep-tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('repcontent-' + tab).classList.add('active');
+}
+
+function onPeriodoChange() {
+  const periodo = document.getElementById('repPeriodo').value;
+  const custom  = document.getElementById('repFechasCustom');
+  custom.style.display = periodo === 'personalizado' ? 'flex' : 'none';
+
+  if (periodo !== 'personalizado') {
+    const { desde, hasta } = calcPeriodo(periodo);
+    document.getElementById('repDesde').value = desde;
+    document.getElementById('repHasta').value = hasta;
+  }
+}
+
+function calcPeriodo(periodo) {
+  const hoy   = new Date();
+  const y     = hoy.getFullYear();
+  const m     = hoy.getMonth();
+  if (periodo === 'mes_actual') {
+    return {
+      desde: `${y}-${String(m+1).padStart(2,'0')}-01`,
+      hasta: new Date(y, m+1, 0).toISOString().split('T')[0],
+    };
+  }
+  if (periodo === 'mes_anterior') {
+    const pm = m === 0 ? 11 : m - 1;
+    const py = m === 0 ? y - 1 : y;
+    return {
+      desde: `${py}-${String(pm+1).padStart(2,'0')}-01`,
+      hasta: new Date(py, pm+1, 0).toISOString().split('T')[0],
+    };
+  }
+  if (periodo === 'trimestre') {
+    const hace3 = new Date(y, m-3, 1);
+    return {
+      desde: hace3.toISOString().split('T')[0],
+      hasta: new Date(y, m+1, 0).toISOString().split('T')[0],
+    };
+  }
+  return { desde: document.getElementById('repDesde').value, hasta: document.getElementById('repHasta').value };
+}
+
+async function generarReportes() {
+  const btn   = document.getElementById('repRunBtn');
+  const desde = document.getElementById('repDesde').value;
+  const hasta = document.getElementById('repHasta').value;
+
+  if (!desde || !hasta) { toast('Seleccioná las fechas del período', true); return; }
+
+  btn.disabled = true; btn.textContent = 'Cargando...';
+
+  // Destruir charts anteriores
+  Object.values(repCharts).forEach(c => c.destroy());
+  repCharts = {};
+
+  try {
+    // Cargar datos en paralelo
+    const [dataCitas, dataPacientes, dataPagos, dataPresupuestos] = await Promise.all([
+      apiFetch(`/citas?desde=${desde}&hasta=${hasta}`),
+      apiFetch(`/pacientes`),
+      // Pagos: traemos de todos los pacientes no es posible directo, usamos citas para datos financieros
+      // y presupuestos globalmente — limitación de la API actual
+      Promise.resolve(null),
+      Promise.resolve(null),
+    ]);
+
+    const citas = dataCitas?.citas || [];
+    const pacientes = dataPacientes?.pacientes || [];
+
+    repDatos = { citas, pacientes, desde, hasta };
+
+    renderRepCitas(citas, desde, hasta);
+    renderRepPacientes(citas, pacientes, desde);
+    renderRepFinanciero(citas, desde, hasta);
+
+    toast('✅ Reporte generado');
+  } catch (e) {
+    toast('Error generando reporte: ' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Generar';
+  }
+}
+
+// ── REPORTE CITAS ────────────────────────────────────────────────────────────
+function renderRepCitas(citas, desde, hasta) {
+  const el = document.getElementById('repcontent-citas');
+  if (!citas.length) { el.innerHTML = `<div class="rep-empty">Sin citas en el período seleccionado</div>`; return; }
+
+  const confirmadas = citas.filter(c => c.estado !== 'cancelada');
+  const canceladas  = citas.filter(c => c.estado === 'cancelada');
+
+  // Conteo por tipo
+  const porTipo = {};
+  confirmadas.forEach(c => { porTipo[c.tipo] = (porTipo[c.tipo] || 0) + 1; });
+
+  // Conteo por doctor
+  const porDoctor = {};
+  confirmadas.forEach(c => { porDoctor[c.doctor] = (porDoctor[c.doctor] || 0) + 1; });
+
+  // Citas por día de la semana
+  const porDia = [0,0,0,0,0,0,0];
+  confirmadas.forEach(c => { const d = new Date(c.fecha).getDay(); porDia[d]++; });
+
+  el.innerHTML = `
+    <div class="rep-stats">
+      <div class="rep-stat"><div class="rep-stat-val">${citas.length}</div><div class="rep-stat-lbl">Total citas</div></div>
+      <div class="rep-stat"><div class="rep-stat-val">${confirmadas.length}</div><div class="rep-stat-lbl">Realizadas</div></div>
+      <div class="rep-stat danger"><div class="rep-stat-val">${canceladas.length}</div><div class="rep-stat-lbl">Canceladas</div></div>
+      <div class="rep-stat warn"><div class="rep-stat-val">${citas.length ? Math.round(canceladas.length/citas.length*100) : 0}%</div><div class="rep-stat-lbl">Tasa cancelación</div></div>
+    </div>
+    <div class="rep-charts">
+      <div class="rep-chart-box"><h4>Por tipo de tratamiento</h4><canvas id="chartTipo"></canvas></div>
+      <div class="rep-chart-box"><h4>Por doctor</h4><canvas id="chartDoctor"></canvas></div>
+    </div>
+    <div class="rep-chart-box" style="margin-bottom:16px"><h4>Citas por día de la semana</h4><canvas id="chartDia" style="max-height:140px"></canvas></div>
+    <div class="rep-section-title">Detalle por tipo</div>
+    <table class="rep-table">
+      <thead><tr><th>Tipo</th><th>Cantidad</th><th>% del total</th></tr></thead>
+      <tbody>${Object.entries(porTipo).sort((a,b)=>b[1]-a[1]).map(([tipo,n])=>`
+        <tr><td>${TIPOS[tipo]?.icon||''} ${TIPOS[tipo]?.label||tipo}</td>
+        <td><strong>${n}</strong></td>
+        <td>${Math.round(n/confirmadas.length*100)}%</td></tr>
+      `).join('')}</tbody>
+    </table>`;
+
+  // Charts
+  const tipoColors = Object.keys(porTipo).map(t => TIPOS[t]?.color || '#666');
+  repCharts.tipo = new Chart(document.getElementById('chartTipo'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(porTipo).map(t => TIPOS[t]?.label || t),
+      datasets: [{ data: Object.values(porTipo), backgroundColor: tipoColors, borderWidth: 0 }]
+    },
+    options: { plugins: { legend: { labels: { color: '#8892a4', font: { family: 'Outfit' } } } } }
+  });
+
+  repCharts.doctor = new Chart(document.getElementById('chartDoctor'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(porDoctor),
+      datasets: [{ data: Object.values(porDoctor), backgroundColor: '#4ecca3', borderRadius: 6, borderSkipped: false }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8892a4' }, grid: { color: '#2a3347' } },
+        y: { ticks: { color: '#8892a4', stepSize: 1 }, grid: { color: '#2a3347' } }
+      }
+    }
+  });
+
+  repCharts.dia = new Chart(document.getElementById('chartDia'), {
+    type: 'bar',
+    data: {
+      labels: ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],
+      datasets: [{ data: porDia, backgroundColor: '#64a0ff', borderRadius: 6, borderSkipped: false }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8892a4' }, grid: { color: '#2a3347' } },
+        y: { ticks: { color: '#8892a4', stepSize: 1 }, grid: { color: '#2a3347' } }
+      }
+    }
+  });
+}
+
+// ── REPORTE PACIENTES ─────────────────────────────────────────────────────────
+function renderRepPacientes(citas, pacientes, desde) {
+  const el = document.getElementById('repcontent-pacientes');
+  const confirmadas = citas.filter(c => c.estado !== 'cancelada');
+
+  // Pacientes atendidos en el período
+  const nombresAtendidos = [...new Set(confirmadas.map(c => c.paciente_nombre.toLowerCase().trim()))];
+
+  // Frecuencia de visitas
+  const frecuencia = {};
+  confirmadas.forEach(c => {
+    const n = c.paciente_nombre;
+    frecuencia[n] = (frecuencia[n] || 0) + 1;
+  });
+  const topPacientes = Object.entries(frecuencia).sort((a,b) => b[1]-a[1]).slice(0, 10);
+
+  // Nuevos vs recurrentes (nuevos = solo 1 cita en el período)
+  const nuevos     = Object.values(frecuencia).filter(v => v === 1).length;
+  const recurrentes = Object.values(frecuencia).filter(v => v > 1).length;
+
+  // Sin cita en últimos 3 meses — comparar contra pacientes con ficha
+  const haceReferencia = new Date();
+  haceReferencia.setMonth(haceReferencia.getMonth() - 3);
+  const refStr = haceReferencia.toISOString().split('T')[0];
+  // Pacientes con ficha que no aparecen en citas recientes (últimos 3 meses de la BD)
+  const nombresRecientes = new Set(
+    citas.filter(c => c.fecha.toString().split('T')[0] >= refStr && c.estado !== 'cancelada')
+         .map(c => c.paciente_nombre.toLowerCase().trim())
+  );
+  const sinVisita = pacientes.filter(p => !nombresRecientes.has(p.nombre.toLowerCase().trim()));
+
+  el.innerHTML = `
+    <div class="rep-stats">
+      <div class="rep-stat"><div class="rep-stat-val">${nombresAtendidos.length}</div><div class="rep-stat-lbl">Pacientes atendidos</div></div>
+      <div class="rep-stat blue"><div class="rep-stat-val">${nuevos}</div><div class="rep-stat-lbl">Primera visita</div></div>
+      <div class="rep-stat"><div class="rep-stat-val">${recurrentes}</div><div class="rep-stat-lbl">Recurrentes</div></div>
+      <div class="rep-stat warn"><div class="rep-stat-val">${sinVisita.length}</div><div class="rep-stat-lbl">Sin visita (3 meses)</div></div>
+    </div>
+    <div class="rep-charts">
+      <div class="rep-chart-box"><h4>Nuevos vs Recurrentes</h4><canvas id="chartNuevos"></canvas></div>
+      <div class="rep-chart-box"><h4>Top pacientes por visitas</h4><canvas id="chartTop"></canvas></div>
+    </div>
+    ${sinVisita.length ? `
+    <div class="rep-section-title">⚠️ Pacientes sin visita en los últimos 3 meses</div>
+    <table class="rep-table">
+      <thead><tr><th>Paciente</th><th>Teléfono</th><th>Email</th></tr></thead>
+      <tbody>${sinVisita.slice(0,20).map(p=>`
+        <tr>
+          <td><strong>${p.nombre}</strong></td>
+          <td>${p.telefono || '—'}</td>
+          <td>${p.email || '—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>` : ''}
+    <div class="rep-section-title">Top 10 pacientes del período</div>
+    <table class="rep-table">
+      <thead><tr><th>#</th><th>Paciente</th><th>Visitas</th></tr></thead>
+      <tbody>${topPacientes.map(([nombre,n],i)=>`
+        <tr><td style="color:var(--text2)">${i+1}</td><td>${nombre}</td><td><strong>${n}</strong></td></tr>
+      `).join('')}</tbody>
+    </table>`;
+
+  repCharts.nuevos = new Chart(document.getElementById('chartNuevos'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Primera visita', 'Recurrentes'],
+      datasets: [{ data: [nuevos, recurrentes], backgroundColor: ['#64a0ff','#4ecca3'], borderWidth: 0 }]
+    },
+    options: { plugins: { legend: { labels: { color: '#8892a4', font: { family: 'Outfit' } } } } }
+  });
+
+  repCharts.top = new Chart(document.getElementById('chartTop'), {
+    type: 'bar',
+    data: {
+      labels: topPacientes.map(([n]) => n.split(' ')[0]),
+      datasets: [{ data: topPacientes.map(([,v]) => v), backgroundColor: '#c8a0ff', borderRadius: 6, borderSkipped: false }]
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8892a4', stepSize: 1 }, grid: { color: '#2a3347' } },
+        y: { ticks: { color: '#8892a4' }, grid: { color: '#2a3347' } }
+      }
+    }
+  });
+}
+
+// ── REPORTE FINANCIERO ────────────────────────────────────────────────────────
+function renderRepFinanciero(citas, desde, hasta) {
+  const el = document.getElementById('repcontent-financiero');
+
+  // Obtener tipo de cambio VES guardado
+  const tcVES = tipoCambioUSDVES;
+
+  // Nota: los pagos reales están en /pagos/:paciente_id (por paciente)
+  // Con los datos disponibles de citas podemos hacer un resumen estimado
+  // Para el reporte financiero real se necesitaría un endpoint /pagos?desde=&hasta=
+  // Por ahora mostramos lo que tenemos y dejamos nota
+
+  const confirmadas = citas.filter(c => c.estado !== 'cancelada');
+  const porTipo = {};
+  confirmadas.forEach(c => { porTipo[c.tipo] = (porTipo[c.tipo] || 0) + 1; });
+
+  el.innerHTML = `
+    <div class="ves-rate-row">
+      💱 Tipo de cambio USD/VES:
+      <input type="number" class="ves-rate-input" id="repTCVES" value="${tcVES}" placeholder="Ej: 45.50" step="0.01"
+        onchange="tipoCambioUSDVES=parseFloat(this.value)||1;localStorage.setItem('dc_tc_ves',tipoCambioUSDVES)">
+      <span style="font-size:0.75rem">· Se usa para conversiones en este reporte</span>
+    </div>
+    <div class="rep-stats">
+      <div class="rep-stat"><div class="rep-stat-val">${confirmadas.length}</div><div class="rep-stat-lbl">Citas facturables</div></div>
+      <div class="rep-stat warn"><div class="rep-stat-val">${citas.filter(c=>c.estado==='cancelada').length}</div><div class="rep-stat-lbl">Canceladas</div></div>
+    </div>
+    <div style="background:rgba(100,160,255,0.08);border:1px solid rgba(100,160,255,0.2);border-radius:10px;padding:16px;margin-bottom:20px;font-size:0.82rem;color:var(--text2);line-height:1.6">
+      ℹ️ <strong style="color:var(--text)">Para ver totales cobrados en ARS / USD / VES</strong>, abrí la historia clínica de cada paciente → pestaña Pagos.<br>
+      Un futuro endpoint <code style="background:var(--surface3);padding:1px 5px;border-radius:3px">/pagos?desde=&hasta=</code> en la API permitirá mostrar aquí el resumen global automáticamente.
+    </div>
+    <div class="rep-charts">
+      <div class="rep-chart-box"><h4>Citas por tipo (facturables)</h4><canvas id="chartFinTipo"></canvas></div>
+      <div class="rep-chart-box"><h4>Distribución por doctor</h4><canvas id="chartFinDoctor"></canvas></div>
+    </div>
+    <div class="rep-section-title">Resumen por tipo de tratamiento</div>
+    <table class="rep-table">
+      <thead><tr><th>Tratamiento</th><th>Citas</th><th>% del total</th></tr></thead>
+      <tbody>${Object.entries(porTipo).sort((a,b)=>b[1]-a[1]).map(([tipo,n])=>`
+        <tr>
+          <td>${TIPOS[tipo]?.icon||''} ${TIPOS[tipo]?.label||tipo}</td>
+          <td><strong>${n}</strong></td>
+          <td>${confirmadas.length ? Math.round(n/confirmadas.length*100) : 0}%</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+
+  const porDoctor = {};
+  confirmadas.forEach(c => { porDoctor[c.doctor] = (porDoctor[c.doctor] || 0) + 1; });
+  const tipoColors = Object.keys(porTipo).map(t => TIPOS[t]?.color || '#666');
+
+  repCharts.finTipo = new Chart(document.getElementById('chartFinTipo'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(porTipo).map(t => TIPOS[t]?.label || t),
+      datasets: [{ data: Object.values(porTipo), backgroundColor: tipoColors, borderWidth: 0 }]
+    },
+    options: { plugins: { legend: { labels: { color: '#8892a4', font: { family: 'Outfit' } } } } }
+  });
+
+  repCharts.finDoctor = new Chart(document.getElementById('chartFinDoctor'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(porDoctor),
+      datasets: [{ data: Object.values(porDoctor), backgroundColor: '#ffd166', borderRadius: 6, borderSkipped: false }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8892a4' }, grid: { color: '#2a3347' } },
+        y: { ticks: { color: '#8892a4', stepSize: 1 }, grid: { color: '#2a3347' } }
+      }
+    }
+  });
+}
+
+// ── EXPORTAR PDF ─────────────────────────────────────────────────────────────
+function exportarPDF() {
+  if (!repDatos) { toast('Primero generá un reporte', true); return; }
+  // Mostrar todas las tabs para impresión
+  document.querySelectorAll('.rep-tab-content').forEach(c => c.style.display = 'block');
+  window.print();
+  // Restaurar después de imprimir
+  setTimeout(() => {
+    document.querySelectorAll('.rep-tab-content').forEach(c => c.style.display = '');
+    document.getElementById('repcontent-' + repCurrentTab).classList.add('active');
+  }, 1000);
+}
 function toggleSidebar() {
   const sidebar  = document.querySelector('.sidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
