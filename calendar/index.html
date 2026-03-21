@@ -1395,7 +1395,7 @@ function renderMonth(y, m) {
     const isToday = ds===hoy;
     h += `<div class="cal-cell${c.other?' other':''}${isToday?' today':''}" onclick="onCellClick('${ds}')">
       <div class="num">${c.d}</div>
-      ${ev.slice(0,3).map(e=>`<div class="ev-chip ${e.estado==='cancelada'?'t-cancelada':TIPOS[e.tipo]?.cls||''}" onclick="event.stopPropagation();showDetail(${e.id})">${TIPOS[e.tipo]?.icon||''} ${e.paciente_nombre.split(' ')[0]} ${e.hora.slice(0,5)}</div>`).join('')}
+      ${ev.slice(0,3).map(e=>`<div class="ev-chip ${e.estado==='cancelada'?'t-cancelada':TIPOS[e.tipo]?.cls||''}" onclick="event.stopPropagation();showDetail(${e.id})">${TIPOS[e.tipo]?.icon||''} ${e.paciente_nombre.split(' ')[0]} ${e.hora.slice(0,5)}${getProximityLabel(e.fecha)?` · ${getProximityLabel(e.fecha).texto}`:''}</div>`).join('')}
       ${ev.length>3?`<div class="more">+${ev.length-3} más</div>`:''}
     </div>`;
   });
@@ -1460,7 +1460,7 @@ function renderToday(ds=null) {
   }
   if(!ev.length){el.innerHTML=`<div class="no-citas">Sin citas programadas</div>`;return;}
   el.innerHTML=ev.map(e=>`<div class="agenda-card" onclick="showDetail(${e.id})">
-    <div class="ac-time">${e.hora.slice(0,5)}</div>
+    <div class="ac-time">${e.hora.slice(0,5)}${proximityBadgeHtml(e.fecha)}</div>
     <div class="ac-name">${e.paciente_nombre}</div>
     <div class="ac-type">${TIPOS[e.tipo]?.icon||''} ${TIPOS[e.tipo]?.label||e.tipo}</div>
   </div>`).join('');
@@ -2527,14 +2527,44 @@ async function loadCitasPaciente() {
   }
 }
 
+// ── INDICADORES VISUALES DE PROXIMIDAD ──────────────────────────────────────
+function getProximityLabel(fechaStr) {
+  const hoy    = todayStr();
+  const fecha  = fechaStr.toString().split('T')[0];
+  if (fecha < hoy) return null; // pasada, sin etiqueta
+
+  const diffMs   = new Date(fecha) - new Date(hoy);
+  const diffDias = Math.round(diffMs / 86400000);
+
+  if (diffDias === 0) return { texto: 'Hoy',        color: '#4ecca3', bg: 'rgba(78,204,163,0.15)' };
+  if (diffDias === 1) return { texto: 'Mañana',     color: '#ffd166', bg: 'rgba(255,209,102,0.15)' };
+  if (diffDias <= 7)  return { texto: `En ${diffDias} días`, color: '#64a0ff', bg: 'rgba(100,160,255,0.15)' };
+  return null;
+}
+
+function proximityBadgeHtml(fechaStr) {
+  const label = getProximityLabel(fechaStr);
+  if (!label) return '';
+  return `<span style="
+    display:inline-flex;align-items:center;
+    background:${label.bg};color:${label.color};
+    font-size:0.68rem;font-weight:700;
+    padding:2px 8px;border-radius:20px;
+    margin-left:6px;letter-spacing:0.03em;
+  ">${label.texto}</span>`;
+}
+
 function renderCitaCard(c, esPasada) {
   const tipo   = TIPOS[c.estado === 'cancelada' ? 'cancelada' : c.tipo] || TIPOS.consulta;
   const fecha  = c.fecha.toString().split('T')[0];
   const isPast = esPasada || c.estado === 'cancelada';
+  const prox   = !isPast ? proximityBadgeHtml(fecha) : '';
   return `<div class="hc-card" style="opacity:${isPast ? '0.75' : '1'};border-left:3px solid ${tipo.color}">
     <div class="hc-card-header">
       <div>
-        <div class="hc-card-date">${fmtDate(fecha)} · ${c.hora.slice(0,5)}</div>
+        <div class="hc-card-date" style="display:flex;align-items:center;flex-wrap:wrap;gap:2px">
+          ${fmtDate(fecha)} · ${c.hora.slice(0,5)}${prox}
+        </div>
         <div class="hc-card-title">${tipo.icon} ${tipo.label}</div>
       </div>
       <span class="status-badge ${c.estado === 'cancelada' ? 'status-rechazado' : isPast ? 'status-pagado' : 'status-aprobado'}">
