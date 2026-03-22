@@ -1548,7 +1548,10 @@ function loadDemo() {
 }
 
 // ── UTILS ───────────────────────────────────────────────────────────────────
-function todayStr() { return new Date().toISOString().split('T')[0]; }
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 function addDays(s, n) { const d = new Date(s); d.setDate(d.getDate()+n); return d.toISOString().split('T')[0]; }
 function fmtDate(s) { const fecha=s.toString().split('T')[0]; const [y,m,d]=fecha.split('-'); return `${d} de ${MESES[parseInt(m)-1]} ${y}`; }
 function evForDate(d) { return eventos.filter(e => e.fecha.toString().split('T')[0] === d).sort((a,b)=>a.hora.localeCompare(b.hora)); }
